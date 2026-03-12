@@ -152,8 +152,59 @@ async def websocket_call(websocket: WebSocket, call_id: str):
         ai_voice_gender=user_prefs["ai_voice_gender"],
     )
 
-    def on_transcript(text: str):
-        transcript_buffer.append(text)
+    async def process_and_respond(transcript_turn: str):
+        conversation_history.append(
+            {"role": "user", "parts": [{"text": transcript_turn}]}
+        )
+
+        try:
+            ai_text = generate_response(
+                history=conversation_history,
+                system_prompt=system_prompt,
+            )
+            signals = parse_signals(ai_text)
+
+            conversation_history.append(
+                {"role": "model", "parts": [{"text": signals["clean_response"]}]}
+            )
+
+            tts_audio = synthesize(
+                signals["clean_response"],
+                language=user_prefs["ai_language"],
+                gender=user_prefs["ai_voice_gender"],
+            )
+            audio_b64 = base64.b64encode(tts_audio).decode() if tts_audio else ""
+
+            response_payload = {
+                "type": "ai_response",
+                "text": signals["clean_response"],
+                "audio_b64": audio_b64,
+                "urgency": signals["urgency"],
+                "category": signals["category"],
+                "action": signals["action"],
+            }
+            await websocket.send_json(response_payload)
+
+            if signals["action"] in ("BLOCK_OTP", "BLOCK_SCAM"):
+                await _broadcast_scam_event(
+                    {
+                        "call_id": call_id,
+                        "category": signals["category"],
+                        "urgency": signals["urgency"],
+                        "action": signals["action"],
+                    }
+                )
+
+            if signals["action"] in ("BLOCK_OTP", "BLOCK_SCAM", "END_CALL"):
+                await websocket.send_json({"type": "call_end", "reason": signals["action"]})
+                # Note: We don't close the connection here yet to allow final audio packets
+        except Exception as e:
+            logger.error(f"Error processing AI response for {call_id}: {e}")
+
+    async def on_transcript(text: str):
+        logger.info(f"Transcript received: {text}")
+        # Process each transcript turn in its own task to avoid blocking the audio stream
+        asyncio.create_task(process_and_respond(text))
 
     deepgram_session = DeepgramStreamingSession(on_transcript_callback=on_transcript)
     await deepgram_session.start()
@@ -165,55 +216,6 @@ async def websocket_call(websocket: WebSocket, call_id: str):
             if "bytes" in message and message["bytes"]:
                 audio_chunk = message["bytes"]
                 await deepgram_session.send_audio(audio_chunk)
-
-                if transcript_buffer:
-                    transcript_turn = " ".join(transcript_buffer)
-                    transcript_buffer.clear()
-
-                    conversation_history.append(
-                        {"role": "user", "parts": [{"text": transcript_turn}]}
-                    )
-
-                    ai_text = generate_response(
-                        history=conversation_history,
-                        system_prompt=system_prompt,
-                    )
-                    signals = parse_signals(ai_text)
-
-                    conversation_history.append(
-                        {"role": "model", "parts": [{"text": signals["clean_response"]}]}
-                    )
-
-                    tts_audio = synthesize(
-                        signals["clean_response"],
-                        language=user_prefs["ai_language"],
-                        gender=user_prefs["ai_voice_gender"],
-                    )
-                    audio_b64 = base64.b64encode(tts_audio).decode() if tts_audio else ""
-
-                    response_payload = {
-                        "type": "ai_response",
-                        "text": signals["clean_response"],
-                        "audio_b64": audio_b64,
-                        "urgency": signals["urgency"],
-                        "category": signals["category"],
-                        "action": signals["action"],
-                    }
-                    await websocket.send_json(response_payload)
-
-                    if signals["action"] in ("BLOCK_OTP", "BLOCK_SCAM"):
-                        await _broadcast_scam_event(
-                            {
-                                "call_id": call_id,
-                                "category": signals["category"],
-                                "urgency": signals["urgency"],
-                                "action": signals["action"],
-                            }
-                        )
-
-                    if signals["action"] in ("BLOCK_OTP", "BLOCK_SCAM", "END_CALL"):
-                        await websocket.send_json({"type": "call_end", "reason": signals["action"]})
-                        break
 
             elif "text" in message:
                 try:

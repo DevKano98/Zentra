@@ -63,9 +63,10 @@ def build_system_prompt(
     Returns:
         Complete system prompt string to pass as GenerateContentConfig.system_instruction.
     """
-    # Gender-aware self-reference in Hindi
+    # Gender-aware name and self-reference in Hindi
+    ai_name = "Divya" if ai_voice_gender == "female" else "Rohan"
     gender_phrase = "bol rahi hoon" if ai_voice_gender == "female" else "bol raha hoon"
-    opening       = f"Namaste, main {user_name} ki taraf se {gender_phrase}"
+    opening       = f"Namaste, main {ai_name} hoon, {user_name} ki taraf se {gender_phrase}"
 
     if ai_language.lower() == "hindi":
         language_instruction = (
