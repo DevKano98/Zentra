@@ -221,14 +221,17 @@ class MainActivity : FlutterActivity() {
             val number = intent.getStringExtra("caller_number") ?: ""
             val callId = intent.getStringExtra("call_id") ?: ""
             
-            // Notify Flutter via the main call control channel
-            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
-                MethodChannel(messenger, "com.zentra.dialer/call_control")
-                    .invokeMethod("incomingScreeningCall", mapOf(
-                        "caller_number" to number,
-                        "call_id" to callId
-                    ))
-            }
+            // Give Flutter 500ms to mount MethodChannel listeners on cold start
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                // Notify Flutter via the main call control channel
+                flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                    MethodChannel(messenger, "com.zentra.dialer/call_control")
+                        .invokeMethod("incomingScreeningCall", mapOf(
+                            "caller_number" to number,
+                            "call_id" to callId
+                        ))
+                }
+            }, 500)
         }
     }
 }

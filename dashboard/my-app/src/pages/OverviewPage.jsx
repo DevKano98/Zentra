@@ -1,22 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
-import {
-  BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts'
 import { PhoneCall, ShieldOff, Users, AlertTriangle, RefreshCw } from 'lucide-react'
 import StatCard from '../components/StatCard'
+import CategoryChart from '../components/CategoryChart'
 import { getStatistics } from '../services/api'
 
-const CATEGORY_COLORS = {
-  'KYC Fraud': '#38bdf8',
-  'Investment Scam': '#818cf8',
-  'Loan Fraud': '#fb923c',
-  'Prize/Lottery': '#34d399',
-  'Impersonation': '#f472b6',
-  'Tech Support': '#facc15',
-  'Other': '#94a3b8',
-}
-const COLOR_LIST = Object.values(CATEGORY_COLORS)
+const urgencyColor = (u) =>
+  u >= 9 ? 'text-rose-400 bg-rose-500/10' : u >= 7 ? 'text-amber-400 bg-amber-500/10' : 'text-emerald-400 bg-emerald-500/10'
 
 const MOCK_STATS = {
   total_calls: 14872,
@@ -50,24 +39,7 @@ const MOCK_STATS = {
   })),
 }
 
-const urgencyColor = (u) =>
-  u >= 9 ? 'text-rose-400 bg-rose-500/10' : u >= 7 ? 'text-amber-400 bg-amber-500/10' : 'text-emerald-400 bg-emerald-500/10'
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-[#0d1117] border border-[#1e2535] rounded-lg p-3 shadow-xl text-xs">
-      <p className="text-[#7dd3fc] font-semibold mb-2">{label}</p>
-      {payload.map((p) => (
-        <div key={p.name} className="flex items-center gap-2 mb-1">
-          <div className="w-2 h-2 rounded-full" style={{ background: p.fill || p.color }} />
-          <span className="text-[#94a3b8]">{p.name}:</span>
-          <span className="text-white font-medium">{p.value}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 export default function OverviewPage() {
   const [data, setData] = useState(MOCK_STATS)
@@ -92,8 +64,6 @@ export default function OverviewPage() {
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [fetchData])
-
-  const barCategories = ['KYC Fraud', 'Investment Scam', 'Loan Fraud', 'Other']
 
   return (
     <div className="space-y-6">
@@ -128,57 +98,11 @@ export default function OverviewPage() {
         <StatCard icon={AlertTriangle} title="Avg Urgency" value={data.avg_urgency?.toFixed(1)} trend={-3} trendLabel="lower is better" color="amber" />
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Bar Chart */}
-        <div className="xl:col-span-2 bg-[#0d1117] border border-[#1e2535] rounded-xl p-5">
-          <h2 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Calls Per Day — Last 7 Days</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={data.calls_per_day} barSize={8} barGap={2}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e2535" vertical={false} />
-              <XAxis dataKey="date" tick={{ fill: '#6b7a99', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#6b7a99', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(56,189,248,0.04)' }} />
-              <Legend wrapperStyle={{ paddingTop: '12px', fontSize: '11px', color: '#6b7a99' }} />
-              {barCategories.map((cat, i) => (
-                <Bar key={cat} dataKey={cat} stackId="a" fill={COLOR_LIST[i]} radius={i === barCategories.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Pie Chart */}
-        <div className="bg-[#0d1117] border border-[#1e2535] rounded-xl p-5">
-          <h2 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Category Distribution</h2>
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie
-                data={data.category_distribution}
-                cx="50%" cy="50%"
-                innerRadius={50} outerRadius={75}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {data.category_distribution?.map((entry, i) => (
-                  <Cell key={entry.name} fill={COLOR_LIST[i % COLOR_LIST.length]} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-1.5 mt-2">
-            {data.category_distribution?.map((entry, i) => (
-              <div key={entry.name} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ background: COLOR_LIST[i % COLOR_LIST.length] }} />
-                  <span className="text-[#6b7a99]">{entry.name}</span>
-                </div>
-                <span className="text-[#94a3b8] font-medium">{entry.value}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Charts Row — BarPanel + PiePanel via CategoryChart */}
+      <CategoryChart
+        callsPerDay={data.calls_per_day}
+        categoryDistribution={data.category_distribution}
+      />
 
       {/* Recent Scams Table */}
       <div className="bg-[#0d1117] border border-[#1e2535] rounded-xl overflow-hidden">

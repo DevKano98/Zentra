@@ -37,6 +37,7 @@ class ZentraCallScreeningService : CallScreeningService() {
             putExtra("call_id", System.currentTimeMillis().toString())
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP) // Ensure it brings to front reliably
         }
         startActivity(intent)
     }

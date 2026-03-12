@@ -57,6 +57,16 @@ class InCallService : InCallService() {
                 call.answer(0)  // Answer silently; audio capture starts in STATE_ACTIVE callback
             }
         }
+        
+        // Android restriction: Cannot inject audio directly into cellular uplink.
+        // Workaround: Turn on speakerphone so the device mic picks up the AI voice from the speaker.
+        val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        audioManager.isSpeakerphoneOn = true
+        // Mute the actual uplink mic so user's background noise doesn't interfere
+        // Wait, if we mute the mic, how does the speakerphone feedback work? 
+        // Actually, if we mute the microphone via AudioManager, the caller hears NOTHING (not even the speaker output).
+        // Let's NOT mute it, but rather just rely on speakerphone for acoustic coupling.
+        // On some devices, CallAudioState handles this natively, but let's stick to speakerphone.
     }
 
     override fun onCallAdded(call: Call) {
@@ -171,6 +181,12 @@ class InCallService : InCallService() {
         audioTrack?.stop()
         audioTrack?.release()
         audioTrack = null
+        
+        // Turn off speakerphone when call ends or screening is over
+        try {
+            val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            audioManager.isSpeakerphoneOn = false
+        } catch (e: Exception) {}
     }
 
     private fun notifyCallEnded() {
@@ -205,7 +221,7 @@ class InCallService : InCallService() {
             val track = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setUsage(AudioAttributes.USAGE_MEDIA) // Use MEDIA to play through speaker reliably
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
