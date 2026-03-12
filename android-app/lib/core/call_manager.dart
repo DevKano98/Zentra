@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -10,7 +9,16 @@ import 'constants.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 
-enum CallState { idle, incoming, active, classifying, completed }
+enum CallState { 
+  idle, 
+  incoming, // Screening AI
+  active,   // Screening AI
+  classifying, 
+  completed, 
+  ringing_normal, // Incoming normal
+  outgoing,       // Outgoing normal (Dialing/Connecting)
+  active_normal   // Ongoing normal
+}
 
 class CallSession {
   final String number;
@@ -94,13 +102,9 @@ class CallManager extends Notifier<CallManagerState> {
     return const CallManagerState();
   }
 
-  Future<void> onIncomingCall(String number) async {
+  Future<void> onIncomingScreeningCall(String number, String callId) async {
     if (state.state != CallState.idle) return;
 
-    // Check scam DB first
-    final isKnownScam = await _api.checkScamDb(number);
-
-    final callId = DateTime.now().millisecondsSinceEpoch.toString();
     final session = CallSession(
       number: number,
       callId: callId,
@@ -109,12 +113,6 @@ class CallManager extends Notifier<CallManagerState> {
     );
 
     state = state.copyWith(state: CallState.incoming, activeSession: session);
-
-    if (isKnownScam) {
-      await NotificationService.instance.showScamAlert(number, 'Known scam number detected');
-      await endCall(reason: 'Known scam number — blocked immediately');
-      return;
-    }
 
     // Open WebSocket for AI screening
     try {
@@ -134,9 +132,62 @@ class CallManager extends Notifier<CallManagerState> {
         'call_id': callId,
       }));
     } catch (e) {
-      // If WS fails, end gracefully
       await endCall(reason: 'Connection error');
     }
+  }
+
+  Future<void> onIncomingCall(String number) async {
+    final callId = DateTime.now().millisecondsSinceEpoch.toString();
+    await onIncomingScreeningCall(number, callId);
+  }
+
+  Future<void> onCallStarted(String number, int androidState) async {
+    // If we're already screening this number, stay in screening state
+    if (state.state == CallState.incoming || state.state == CallState.active) {
+       // Auto-answer if it's ringing and we're ready
+       if (androidState == 2) { // STATE_RINGING
+         await _callChannel.invokeMethod('answerCurrentCall');
+       }
+       return;
+    }
+
+    // Determine state
+    CallState newState = CallState.ringing_normal;
+    if (androidState == 1 || androidState == 9) { // DIALING or CONNECTING
+       newState = CallState.outgoing;
+    } else if (androidState == 2) { // RINGING
+       newState = CallState.ringing_normal;
+    }
+
+    final session = CallSession(
+      number: number,
+      callId: DateTime.now().millisecondsSinceEpoch.toString(),
+      startTime: DateTime.now(),
+      state: newState,
+    );
+    state = state.copyWith(state: newState, activeSession: session);
+  }
+
+  Future<void> onCallActive() async {
+    if (state.state == CallState.ringing_normal || state.state == CallState.outgoing) {
+      state = state.copyWith(
+        state: CallState.active_normal,
+        activeSession: state.activeSession?.copyWith(state: CallState.active_normal),
+      );
+    }
+  }
+
+  Future<void> answerNormalCall() async {
+    if (state.state != CallState.ringing_normal) return;
+    try {
+      await _callChannel.invokeMethod('answerCurrentCall');
+      // State will be updated by onCallActive from native
+    } catch (_) {}
+  }
+
+  Future<void> declineNormalCall() async {
+    if (state.state == CallState.idle) return;
+    await endCall(reason: 'Declined by user');
   }
 
   Future<void> onAudioChunk(Uint8List bytes) async {
@@ -230,7 +281,12 @@ class CallManager extends Notifier<CallManagerState> {
     await endCall(reason: 'Call ended by caller');
   }
 
+  bool _isEnding = false;
   Future<void> endCall({String reason = ''}) async {
+    if (_isEnding || state.state == CallState.idle) return;
+    _isEnding = true;
+
+    try {
     final session = state.activeSession;
     state = state.copyWith(state: CallState.classifying);
 
@@ -265,7 +321,10 @@ class CallManager extends Notifier<CallManagerState> {
       } catch (_) {}
     }
 
-    state = const CallManagerState(state: CallState.idle);
+    } finally {
+      state = const CallManagerState(state: CallState.idle);
+      _isEnding = false;
+    }
   }
 
   void setUrgencyThreshold(int threshold) {

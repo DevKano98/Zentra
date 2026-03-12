@@ -1,15 +1,14 @@
 package com.zentra.zentra
 
-import io.flutter.embedding.android.FlutterActivity
-
-class MainActivity : FlutterActivity()
-package com.zentra
-
 import android.content.Intent
 import android.telecom.TelecomManager
 import android.app.role.RoleManager
 import android.os.Build
 import android.os.Bundle
+import android.net.Uri
+import android.provider.CallLog
+import android.provider.BlockedNumberContract
+import android.content.ContentValues
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
@@ -22,15 +21,15 @@ class MainActivity : FlutterActivity() {
         const val CHANNEL_AUDIO = "zentra/audio"
         const val CHANNEL_CALL = "zentra/call"
         const val CHANNEL_NOTIFICATIONS = "zentra/notifications"
-        const val CHANNEL_SETUP = "zentra/setup"
-        const val REQUEST_CODE_DEFAULT_DIALER = 1001
+        private const val REQUEST_CODE_SET_DEFAULT_DIALER = 1001
     }
 
     private lateinit var screeningChannel: MethodChannel
     private lateinit var audioChannel: MethodChannel
     private lateinit var callChannel: MethodChannel
     private lateinit var notificationsChannel: MethodChannel
-    private lateinit var setupChannel: MethodChannel
+
+    private var pendingResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -38,12 +37,18 @@ class MainActivity : FlutterActivity() {
         // Cache engine for use by services
         FlutterEngineCache.getInstance().put("main_engine", flutterEngine)
 
+        // Handle initial intent if any
+        handleIntent(intent)
+
         // 1. Screening channel
         screeningChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_SCREENING)
+        
+        // Handle initial intent if any
+        handleIntent(intent)
+
         screeningChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "endCall" -> {
-                    // Flutter requesting call end
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -57,7 +62,6 @@ class MainActivity : FlutterActivity() {
                 "playAudioBytes" -> {
                     val audioBytes = call.argument<ByteArray>("data")
                     if (audioBytes != null) {
-                        // Forward to InCallService
                         InCallServiceHolder.instance?.playAudioBytes(audioBytes)
                         result.success(null)
                     } else {
@@ -74,6 +78,10 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "endCurrentCall" -> {
                     InCallServiceHolder.instance?.currentCall?.disconnect()
+                    result.success(null)
+                }
+                "answerCurrentCall" -> {
+                    InCallServiceHolder.instance?.currentCall?.answer(0)
                     result.success(null)
                 }
                 "getCallState" -> {
@@ -101,40 +109,80 @@ class MainActivity : FlutterActivity() {
         }
 
         // 5. Setup channel
-        setupChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_SETUP)
-        setupChannel.setMethodCallHandler { call, result ->
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.zentra.dialer/call_control").setMethodCallHandler { call, result ->
             when (call.method) {
-                "requestDefaultDialer" -> {
-                    requestDefaultDialer()
-                    result.success(null)
+                "setDefaultDialer" -> {
+                    val telecomManager = getSystemService(TELECOM_SERVICE) as TelecomManager
+                    if (telecomManager.defaultDialerPackage != packageName) {
+                        pendingResult = result
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val roleManager = getSystemService(RoleManager::class.java)
+                            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
+                            startActivityForResult(intent, REQUEST_CODE_SET_DEFAULT_DIALER)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
+                                .putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, packageName)
+                            startActivityForResult(intent, REQUEST_CODE_SET_DEFAULT_DIALER)
+                        }
+                    } else {
+                        result.success(true)
+                    }
                 }
-                "isDefaultDialer" -> {
+                "checkDefaultDialer" -> {
                     val telecomManager = getSystemService(TELECOM_SERVICE) as TelecomManager
                     result.success(telecomManager.defaultDialerPackage == packageName)
                 }
-                else -> result.notImplemented()
-            }
-        }
-    }
-
-    private fun requestDefaultDialer() {
-        val telecomManager = getSystemService(TELECOM_SERVICE) as TelecomManager
-        if (telecomManager.defaultDialerPackage != packageName) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val roleManager = getSystemService(RoleManager::class.java)
-                if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER) &&
-                    !roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
-                    val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
-                    startActivityForResult(intent, REQUEST_CODE_DEFAULT_DIALER)
+                "deleteCallLog" -> {
+                    val number = call.argument<String>("number")
+                    if (number != null) {
+                        try {
+                            val queryString = "${CallLog.Calls.NUMBER} = ?"
+                            contentResolver.delete(CallLog.Calls.CONTENT_URI, queryString, arrayOf(number))
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("DELETE_FAILED", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "Number cannot be null", null)
+                    }
                 }
-            } else {
-                @Suppress("DEPRECATION")
-                val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
-                    .putExtra(
-                        TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME,
-                        packageName
-                    )
-                startActivity(intent)
+                "blockNumber" -> {
+                    val number = call.argument<String>("number")
+                    if (number != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        try {
+                            val values = ContentValues().apply {
+                                put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, number)
+                            }
+                            contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI, values)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("BLOCK_FAILED", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "Number cannot be null or API too low", null)
+                    }
+                }
+                "placeCall" -> {
+                    val number = call.argument<String>("number")
+                    if (number != null) {
+                        try {
+                            val telecomManager = getSystemService(TELECOM_SERVICE) as TelecomManager
+                            val uri = Uri.fromParts("tel", number, null)
+                            val extras = Bundle()
+                            extras.putBoolean(TelecomManager.EXTRA_START_CALL_WITH_SPEAKERPHONE, false)
+                            telecomManager.placeCall(uri, extras)
+                            result.success(true)
+                        } catch (e: SecurityException) {
+                            result.error("SECURITY_EXCEPTION", "Missing CALL_PHONE permission", null)
+                        } catch (e: Exception) {
+                            result.error("CALL_FAILED", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "Number cannot be null", null)
+                    }
+                }
+                else -> result.notImplemented()
             }
         }
     }
@@ -149,15 +197,37 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_CODE_DEFAULT_DIALER) {
+        if (requestCode == REQUEST_CODE_SET_DEFAULT_DIALER) {
             val telecomManager = getSystemService(TELECOM_SERVICE) as TelecomManager
             val isDefault = telecomManager.defaultDialerPackage == packageName
-            setupChannel.invokeMethod("defaultDialerResult", mapOf("isDefault" to isDefault))
+            pendingResult?.success(isDefault)
+            pendingResult = null
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == "START_AI_SCREENING") {
+            val number = intent.getStringExtra("caller_number") ?: ""
+            val callId = intent.getStringExtra("call_id") ?: ""
+            
+            // Notify Flutter via the main call control channel
+            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                MethodChannel(messenger, "com.zentra.dialer/call_control")
+                    .invokeMethod("incomingScreeningCall", mapOf(
+                        "caller_number" to number,
+                        "call_id" to callId
+                    ))
+            }
         }
     }
 }
 
-// Singleton holder for InCallService access from MainActivity
 object InCallServiceHolder {
     var instance: InCallService? = null
 }

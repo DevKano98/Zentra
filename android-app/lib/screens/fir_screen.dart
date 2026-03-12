@@ -9,7 +9,7 @@ import '../models/unified_call_entry.dart';
 import '../services/api_service.dart';
 
 final scamCallsProvider = FutureProvider<List<UnifiedCallEntry>>((ref) async {
-  final storage = const FlutterSecureStorage();
+  const storage = FlutterSecureStorage();
   final userId = await storage.read(key: kStorageUserId) ?? '';
   if (userId.isEmpty) return [];
   final all = await ApiService().getCallHistory(userId);
@@ -26,7 +26,8 @@ class FirScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('FIR Reports', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('FIR Reports',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -85,7 +86,8 @@ class _FirCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.red.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -125,7 +127,8 @@ class _FirCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   entry.displayName,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 16),
                 ),
               ],
             ),
@@ -181,7 +184,6 @@ class _FirCard extends StatelessWidget {
                       label: const Text('FIR Pending'),
                     ),
                   ),
-
                 if (entry.blockchainTxHash != null) ...[
                   const SizedBox(width: 8),
                   Expanded(
@@ -200,7 +202,8 @@ class _FirCard extends StatelessWidget {
     );
   }
 
-  Future<void> _downloadFir(BuildContext context, UnifiedCallEntry entry) async {
+  Future<void> _downloadFir(
+      BuildContext context, UnifiedCallEntry entry) async {
     try {
       // Get signed URL from backend
       final signedUrl = await ApiService().downloadReport(entry.firPdfUrl!);

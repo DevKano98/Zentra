@@ -178,14 +178,20 @@ async def process_turn(request: Request, body: ProcessTurnRequest):
 
 @router.post("/save-record")
 async def save_record(body: SaveRecordRequest):
+    summary = ""
+    tx_hash = ""
+    
+    try:
+        summary = await summarize_call(body.transcript)
+    except Exception as e:
+        logger.warning(f"Summarize failed: {e}")
+
     phone_hash = _hash_phone(body.caller_number)
     caller_name = _extract_caller_name(body.transcript)
     call_outcome = _action_to_outcome(body.final_action)
 
-    summary = await summarize_call(body.transcript)
-
     call_data = {
-        "id": body.call_id,
+        "app_call_id": body.call_id,  # Store timestamp as text
         "caller_number": body.caller_number,
         "caller_number_hash": phone_hash,
         "caller_name": caller_name,
@@ -212,12 +218,16 @@ async def save_record(body: SaveRecordRequest):
     timestamp = call_data["created_at"]
     call_hash = hash_call_record(body.transcript, body.caller_number, timestamp, body.final_category or "UNKNOWN")
 
-    tx_hash = await write_to_blockchain(
-        call_hash=call_hash,
-        user_id=body.user_id,
-        category=body.final_category or "UNKNOWN",
-        is_scam=is_scam,
-    )
+    try:
+        tx_hash = await write_to_blockchain(
+            call_hash=call_hash,
+            user_id=body.user_id,
+            category=body.final_category or "UNKNOWN",
+            is_scam=is_scam,
+        )
+    except Exception as e:
+        logger.warning(f"Blockchain failed: {e}")
+    
     call_data["blockchain_tx_hash"] = tx_hash
 
     if is_scam:
@@ -229,7 +239,11 @@ async def save_record(body: SaveRecordRequest):
         except Exception as e:
             logger.error(f"FIR generation failed: {e}")
 
-    save_call_record(body.user_id, call_data)
+    try:
+        save_call_record(body.user_id, call_data)
+    except Exception as e:
+        logger.error(f"Supabase save failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
     user = get_user_by_id(body.user_id)
     if user:

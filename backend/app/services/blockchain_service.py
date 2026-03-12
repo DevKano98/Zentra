@@ -76,8 +76,8 @@ async def write_to_blockchain(
         logger.info(f"Blockchain tx recorded: {tx_hash_hex}")
         return tx_hash_hex
     except Exception as e:
-        logger.error(f"Blockchain write failed: {e}")
-        return ""
+        logger.warning(f"Blockchain write skipped: {e}")
+        return ""  # Return empty string, not raise
 
 
 def verify_on_chain(call_hash: str) -> bool:

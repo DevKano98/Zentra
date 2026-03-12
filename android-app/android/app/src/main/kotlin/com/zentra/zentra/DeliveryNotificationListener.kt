@@ -1,4 +1,4 @@
-package com.zentra
+package com.zentra.zentra
 
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification

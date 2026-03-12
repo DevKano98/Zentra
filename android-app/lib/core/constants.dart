@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 // Backend
-const String kDefaultBackendUrl = 'https://zentra-backend.onrender.com';
+const String kDefaultBackendUrl = 'https://zentra-backend-ofva.onrender.com';
+const String kWsBaseUrl = 'wss://zentra-backend-ofva.onrender.com';
+const String kWsCallPath = '/ws/call/';
 
 // MethodChannel names
 const String kChannelScreening = 'zentra/screening';

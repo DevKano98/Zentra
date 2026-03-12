@@ -1,4 +1,4 @@
-package com.zentra
+package com.zentra.zentra
 
 import android.content.BroadcastReceiver
 import android.content.Context

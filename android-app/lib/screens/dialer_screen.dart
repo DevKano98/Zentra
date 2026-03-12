@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/unified_call_entry.dart';
 import '../services/api_service.dart';
 
-final recentDialerCallsProvider = FutureProvider<List<UnifiedCallEntry>>((ref) async {
+final recentDialerCallsProvider =
+    FutureProvider<List<UnifiedCallEntry>>((ref) async {
   return ApiService().getRecentCalls(limit: 5);
 });
 
@@ -25,19 +27,28 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
   void _backspace() {
     if (_dialedNumber.isNotEmpty) {
-      setState(() => _dialedNumber = _dialedNumber.substring(0, _dialedNumber.length - 1));
+      setState(() =>
+          _dialedNumber = _dialedNumber.substring(0, _dialedNumber.length - 1));
     }
   }
 
+  static const _callControlChannel = MethodChannel('com.zentra.dialer/call_control');
+
   Future<void> _placeCall() async {
     if (_dialedNumber.isEmpty) return;
-    final uri = Uri(scheme: 'tel', path: _dialedNumber);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      await _callControlChannel.invokeMethod('placeCall', {'number': _dialedNumber});
+    } catch (e) {
+      debugPrint('Failed to place call: $e');
+    }
   }
 
   Future<void> _callNumber(String number) async {
-    final uri = Uri(scheme: 'tel', path: number);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      await _callControlChannel.invokeMethod('placeCall', {'number': number});
+    } catch (e) {
+      debugPrint('Failed to call number: $e');
+    }
   }
 
   @override
@@ -48,7 +59,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dialer', style: TextStyle(fontWeight: FontWeight.bold)),
+        title:
+            const Text('Dialer', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: Column(
         children: [
@@ -59,7 +71,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    _dialedNumber.isEmpty ? 'Enter number' : _formatDisplay(_dialedNumber),
+                    _dialedNumber.isEmpty
+                        ? 'Enter number'
+                        : _formatDisplay(_dialedNumber),
                     style: theme.textTheme.headlineMedium?.copyWith(
                       color: _dialedNumber.isEmpty
                           ? color.onSurface.withOpacity(0.4)
@@ -102,7 +116,9 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: _dialedNumber.isNotEmpty ? Colors.green : Colors.grey.shade300,
+                  color: _dialedNumber.isNotEmpty
+                      ? Colors.green
+                      : Colors.grey.shade300,
                   shape: BoxShape.circle,
                   boxShadow: _dialedNumber.isNotEmpty
                       ? [
@@ -156,13 +172,15 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
                           title: Text(entry.displayName),
                           subtitle: Text(entry.category ?? 'Screened'),
                           trailing: IconButton(
-                            icon: const Icon(Icons.call_outlined, color: Colors.green),
+                            icon: const Icon(Icons.call_outlined,
+                                color: Colors.green),
                             onPressed: () => _callNumber(entry.fullNumber),
                           ),
                         );
                       },
                     ),
-                    loading: () => const Center(child: CircularProgressIndicator()),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
                     error: (_, __) => const SizedBox(),
                   ),
                 ),
@@ -179,7 +197,8 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: digits.map((d) => _DialKey(label: d, onTap: _appendDigit)).toList(),
+        children:
+            digits.map((d) => _DialKey(label: d, onTap: _appendDigit)).toList(),
       ),
     );
   }
@@ -187,8 +206,10 @@ class _DialerScreenState extends ConsumerState<DialerScreen> {
   String _formatDisplay(String number) {
     // Simple formatting: add spaces every 3-4 digits
     if (number.length <= 5) return number;
-    if (number.length <= 10) {
+    if (number.length <= 10 && number.length > 7) {
       return '${number.substring(0, number.length - 7)} ${number.substring(number.length - 7, number.length - 4)} ${number.substring(number.length - 4)}';
+    } else if (number.length > 5 && number.length <= 7) {
+      return '${number.substring(0, number.length - 4)} ${number.substring(number.length - 4)}';
     }
     return number;
   }
@@ -210,7 +231,7 @@ class _DialKey extends StatelessWidget {
         width: 72,
         height: 72,
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceVariant,
+          color: theme.colorScheme.surfaceContainerHighest,
           shape: BoxShape.circle,
         ),
         child: Center(
@@ -224,4 +245,14 @@ class _DialKey extends StatelessWidget {
       ),
     );
   }
+}
+
+@Preview(name: 'Dialer Screen')
+Widget previewDialerScreen() {
+  return const ProviderScope(
+    child: MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: DialerScreen(),
+    ),
+  );
 }

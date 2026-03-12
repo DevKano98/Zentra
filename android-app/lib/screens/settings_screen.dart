@@ -49,8 +49,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final telegram = await _storage.read(key: kStorageTelegramChatId);
 
     setState(() {
-      _urgencyThreshold =
-          double.tryParse(threshold ?? '') ?? kDefaultUrgencyThreshold.toDouble();
+      _urgencyThreshold = double.tryParse(threshold ?? '') ??
+          kDefaultUrgencyThreshold.toDouble();
       _voiceLanguage = lang ?? 'Hindi';
       _voiceGender = gender ?? 'Female';
       _backendUrl = url ?? kDefaultBackendUrl;
@@ -111,7 +111,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Settings',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           TextButton(
             onPressed: _saving ? null : _saveSettings,
@@ -129,7 +130,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           // Voice Settings
-          _SectionHeader(title: 'Voice Settings'),
+          const _SectionHeader(title: 'Voice Settings'),
           VoiceSettingsWidget(
             language: _voiceLanguage,
             gender: _voiceGender,
@@ -144,7 +145,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
 
           // Urgency Threshold
-          _SectionHeader(title: 'Urgency Threshold'),
+          const _SectionHeader(title: 'Urgency Threshold'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Column(
@@ -177,7 +178,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
 
           // OTP Guard (always on)
-          _SectionHeader(title: 'OTP Guard'),
+          const _SectionHeader(title: 'OTP Guard'),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -229,36 +230,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ],
             ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Telegram
-          _SectionHeader(title: 'Telegram Alerts'),
-          TextField(
-            controller: _telegramCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Telegram Chat ID',
-              hintText: 'e.g. 123456789',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.telegram),
-            ),
-            keyboardType: TextInputType.number,
-          ),
-
-          const SizedBox(height: 24),
-
-          // Advanced: Backend URL
-          _SectionHeader(title: 'Advanced'),
-          TextField(
-            controller: _backendUrlCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Backend URL',
-              hintText: 'https://zentra-backend.onrender.com',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.cloud_outlined),
-            ),
-            keyboardType: TextInputType.url,
           ),
 
           const SizedBox(height: 32),

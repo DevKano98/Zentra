@@ -58,14 +58,8 @@ class ApiClient {
   }
 
   Future<WebSocketChannel> connectCallWebSocket(String callId) async {
-    final backendUrl = await _storage.read(key: kStorageBackendUrl) ?? kDefaultBackendUrl;
     final token = await _storage.read(key: kStorageJwtToken) ?? '';
-
-    final wsUrl = backendUrl
-        .replaceFirst('https://', 'wss://')
-        .replaceFirst('http://', 'ws://');
-
-    final uri = Uri.parse('$wsUrl/ws/calls/$callId?token=$token');
-    return WebSocketChannel.connect(uri);
+    final url = '$kWsBaseUrl$kWsCallPath$callId?token=$token';
+    return WebSocketChannel.connect(Uri.parse(url));
   }
 }

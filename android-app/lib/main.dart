@@ -5,11 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/constants.dart';
+// Removed custom theme import
 import 'core/call_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/dialer_screen.dart';
 import 'screens/call_history_screen.dart';
+import 'screens/contacts_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/normal_call_screen.dart';
 import 'services/notification_service.dart';
 
 void main() async {
@@ -67,6 +70,12 @@ class _ZentraAppState extends ConsumerState<ZentraApp> {
         }
       } else if (call.method == 'callEnded') {
         ref.read(callManagerProvider.notifier).onCallEnded();
+      } else if (call.method == 'callStarted') {
+        final number = call.arguments['number'] as String? ?? '';
+        final state = call.arguments['state'] as int? ?? 0;
+        ref.read(callManagerProvider.notifier).onCallStarted(number, state);
+      } else if (call.method == 'callActive') {
+        ref.read(callManagerProvider.notifier).onCallActive();
       }
     });
 
@@ -95,18 +104,35 @@ class _ZentraAppState extends ConsumerState<ZentraApp> {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF4F46E5),
-          brightness: Brightness.light,
+          seedColor: const Color(0xFFDBB8FF), // Primary accent: light purple
+          primary: const Color(0xFFDBB8FF),
+          surface: Colors.white,
+          onSurface: const Color(0xFF1F2937), // Dark text
+          primaryContainer: const Color(0xFFF9FAFB), // Very light gray card bg
+          onSurfaceVariant: const Color(0xFF6B7280), // Secondary text
         ),
-        fontFamily: 'Inter',
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF4F46E5),
-          brightness: Brightness.dark,
+        scaffoldBackgroundColor: Colors.white,
+        fontFamily: 'Inter', // Assuming Inter based on modern SaaS UI
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
         ),
-        fontFamily: 'Inter',
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          iconTheme: IconThemeData(color: Color(0xFF1F2937)),
+          titleTextStyle: TextStyle(
+            color: Color(0xFF1F2937),
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+          ),
+        ),
       ),
       home: widget.showOnboarding ? const OnboardingScreen() : const MainShell(),
       routes: {
@@ -130,39 +156,65 @@ class _MainShellState extends State<MainShell> {
   final List<Widget> _screens = const [
     HomeScreen(),
     DialerScreen(),
+    ContactsScreen(),
     CallHistoryScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
-        backgroundColor: colorScheme.surface,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.shield_outlined),
-            selectedIcon: Icon(Icons.shield),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.dialpad_outlined),
-            selectedIcon: Icon(Icons.dialpad),
-            label: 'Dialer',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'History',
-          ),
-        ],
-      ),
+    return Consumer(
+      builder: (context, ref, child) {
+        final callState = ref.watch(callManagerProvider);
+        final showCallUI = callState.state == CallState.ringing_normal || 
+                           callState.state == CallState.outgoing ||
+                           callState.state == CallState.active_normal;
+
+        return Stack(
+          children: [
+            Scaffold(
+              body: IndexedStack(
+                index: _selectedIndex,
+                children: _screens,
+              ),
+              bottomNavigationBar: Container(
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.grey.shade200, width: 1)),
+                ),
+                child: NavigationBar(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.shield_outlined),
+                      selectedIcon: Icon(Icons.shield_rounded),
+                      label: 'Home',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.dialpad_outlined),
+                      selectedIcon: Icon(Icons.dialpad_rounded),
+                      label: 'Dialer',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.contacts_outlined),
+                      selectedIcon: Icon(Icons.contacts_rounded),
+                      label: 'Contacts',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.history_rounded),
+                      selectedIcon: Icon(Icons.history_rounded),
+                      label: 'History',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (showCallUI)
+              const Positioned.fill(
+                child: NormalCallScreen(),
+              ),
+          ],
+        );
+      },
     );
   }
 }

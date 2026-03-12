@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "324666698445",
+    "project_id": "zentra-b60f4",
+    "storage_bucket": "zentra-b60f4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:324666698445:android:07760878e158d355991784",
+        "android_client_info": {
+          "package_name": "com.zentra.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHvA0M8k72i6o-7MNqC_UxcAXFnczGB6U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:324666698445:android:b0b845e54bb58251991784",
+        "android_client_info": {
+          "package_name": "com.zentra.zentra"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHvA0M8k72i6o-7MNqC_UxcAXFnczGB6U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

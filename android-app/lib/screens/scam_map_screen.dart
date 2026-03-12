@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../core/theme.dart';
 import '../services/api_service.dart';
 
 class HeatmapPoint {
@@ -73,28 +74,33 @@ class ScamMapScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final heatmap = ref.watch(scamHeatmapProvider);
-    final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: kSurface,
       appBar: AppBar(
-        title: const Text('Scam Map', style: TextStyle(fontWeight: FontWeight.bold)),
+        titleSpacing: 20,
+        title: const Text('Scam Map'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => ref.read(scamHeatmapProvider.notifier).refresh(),
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () =>
+                ref.read(scamHeatmapProvider.notifier).refresh(),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Stack(
         children: [
+          // Map
           FlutterMap(
             options: const MapOptions(
-              initialCenter: LatLng(20.5937, 78.9629), // Center of India
+              initialCenter: LatLng(20.5937, 78.9629),
               initialZoom: 4.5,
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate:
+                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.zentra',
               ),
               heatmap.when(
@@ -104,32 +110,34 @@ class ScamMapScreen extends ConsumerWidget {
                     return CircleMarker(
                       point: LatLng(p.lat, p.lng),
                       radius: radius,
-                      color: Colors.red.withOpacity(0.35),
-                      borderColor: Colors.red.withOpacity(0.7),
+                      color: const Color(0xFFDC2626).withOpacity(0.28),
+                      borderColor: const Color(0xFFDC2626).withOpacity(0.65),
                       borderStrokeWidth: 1.5,
                       useRadiusInMeter: true,
                     );
                   }).toList(),
                 ),
-                loading: () => const CircleLayer(circles: []),
-                error: (_, __) => const CircleLayer(circles: []),
+                loading: () => const CircleLayer<CircleMarker>(circles: []),
+                error: (_, __) => const CircleLayer<CircleMarker>(circles: []),
               ),
             ],
           ),
 
-          // Legend
+          // Legend card
           Positioned(
             bottom: 24,
             right: 16,
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(12),
+                color: kSurface.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: kBorder),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
@@ -138,12 +146,25 @@ class ScamMapScreen extends ConsumerWidget {
                 children: [
                   const Text(
                     'Scam Hotspots',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: kTextPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  _LegendItem(color: Colors.red.withOpacity(0.3), label: 'Low'),
-                  _LegendItem(color: Colors.red.withOpacity(0.5), label: 'Medium'),
-                  _LegendItem(color: Colors.red.withOpacity(0.8), label: 'High'),
+                  const SizedBox(height: 10),
+                  _LegendItem(
+                    color: const Color(0xFFDC2626).withOpacity(0.3),
+                    label: 'Low',
+                  ),
+                  _LegendItem(
+                    color: const Color(0xFFDC2626).withOpacity(0.55),
+                    label: 'Medium',
+                  ),
+                  _LegendItem(
+                    color: const Color(0xFFDC2626).withOpacity(0.8),
+                    label: 'High',
+                  ),
                 ],
               ),
             ),
@@ -151,26 +172,43 @@ class ScamMapScreen extends ConsumerWidget {
 
           // Loading overlay
           if (heatmap.isLoading)
-            const Positioned(
+            Positioned(
               top: 16,
               left: 0,
               right: 0,
               child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 8),
-                        Text('Updating map...'),
-                      ],
-                    ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: kSurface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: kBorder),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: kPurpleDark),
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        'Updating map…',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: kTextPrimary,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -196,21 +234,25 @@ class _LegendItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 14,
-            height: 14,
+            width: 12,
+            height: 12,
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.red.withOpacity(0.7)),
+              border: Border.all(
+                  color: const Color(0xFFDC2626).withOpacity(0.7),
+                  width: 1),
             ),
           ),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 11)),
+          const SizedBox(width: 8),
+          Text(label,
+              style:
+                  const TextStyle(fontSize: 11, color: kTextSecondary)),
         ],
       ),
     );

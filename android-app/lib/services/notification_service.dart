@@ -198,7 +198,7 @@ class NotificationService {
         notification.body ?? 'Scam call blocked',
       );
     } else {
-      final androidDetails = AndroidNotificationDetails(
+      const androidDetails = AndroidNotificationDetails(
         _callAlertChannelId,
         'Call Alerts',
         importance: Importance.high,
@@ -209,7 +209,7 @@ class NotificationService {
         notification.hashCode,
         notification.title ?? 'Zentra',
         notification.body ?? '',
-        NotificationDetails(android: androidDetails),
+        const NotificationDetails(android: androidDetails),
       );
     }
   }

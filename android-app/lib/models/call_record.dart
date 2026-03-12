@@ -1,4 +1,3 @@
-import '../core/constants.dart';
 
 enum CallCategory {
   scam,

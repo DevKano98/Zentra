@@ -25,7 +25,7 @@ import logging
 import time
 from typing import Callable, Optional
 
-from deepgram import DeepgramClient
+from deepgram import DeepgramClient, LiveOptions
 from deepgram.core.events import EventType
 from app.config import settings
 
@@ -34,16 +34,14 @@ logger = logging.getLogger(__name__)
 # One shared client — thread-safe, reused across all sessions
 _dg_client = DeepgramClient(api_key=settings.DEEPGRAM_API_KEY)
 
-# nova-3 is Deepgram's latest model — best accuracy for Indian English (en-IN)
+# Valid params for deepgram-sdk==6.0.1 LiveOptions
 _STREAM_PARAMS = dict(
     model="nova-3",
+    language="hi",
+    smart_format=True,
     encoding="linear16",
     sample_rate=16000,
-    punctuate=True,
-    language="en-IN",
-    smart_format=True,        # capitalisation, numbers, currency
-    interim_results=False,    # only fire on final — reduces callback noise
-    utterance_end_ms=1000,    # silence gap that triggers a final transcript
+    channels=1,
 )
 
 
@@ -77,7 +75,8 @@ class DeepgramStreamingSession:
     async def start(self) -> None:
         """Open a live streaming connection to Deepgram."""
         self._start_time = time.monotonic()
-        self.conn = _dg_client.listen.v2.connect(**_STREAM_PARAMS)
+        options = LiveOptions(**_STREAM_PARAMS)
+        self.conn = _dg_client.listen.live.v("1").start(options)
 
         def on_message(self_ref, message, **kwargs):
             """

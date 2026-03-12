@@ -52,9 +52,9 @@ class _VoiceSettingsWidgetState extends State<VoiceSettingsWidget> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.surfaceVariant.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.outline.withOpacity(0.2)),
+        color: color.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,10 +81,15 @@ class _VoiceSettingsWidgetState extends State<VoiceSettingsWidget> {
                 onSelected: (selected) {
                   if (selected) _updateLanguage(lang);
                 },
-                selectedColor: color.primaryContainer,
+                selectedColor: color.primary.withOpacity(0.15),
+                showCheckmark: false,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                side: BorderSide(
+                  color: _language == lang ? color.primary : Colors.grey.shade300,
+                ),
                 labelStyle: TextStyle(
                   color: _language == lang
-                      ? color.onPrimaryContainer
+                      ? color.primary
                       : color.onSurfaceVariant,
                   fontWeight: _language == lang
                       ? FontWeight.bold
@@ -119,10 +124,15 @@ class _VoiceSettingsWidgetState extends State<VoiceSettingsWidget> {
                 onSelected: (selected) {
                   if (selected) _updateGender(gender);
                 },
-                selectedColor: color.primaryContainer,
+                selectedColor: color.primary.withOpacity(0.15),
+                showCheckmark: false,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                side: BorderSide(
+                  color: _gender == gender ? color.primary : Colors.grey.shade300,
+                ),
                 labelStyle: TextStyle(
                   color: _gender == gender
-                      ? color.onPrimaryContainer
+                      ? color.primary
                       : color.onSurfaceVariant,
                   fontWeight: _gender == gender
                       ? FontWeight.bold

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../core/api_client.dart';
@@ -15,11 +16,23 @@ class ApiService {
 
   final _storage = const FlutterSecureStorage();
 
-  Future<Dio> get _dio async => ApiClient().getDio();
+  Future<Dio> get _dio async {
+    final dio = await ApiClient().getDio();
+    if (!dio.interceptors.any((i) => i is LogInterceptor)) {
+      dio.interceptors.add(LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+        error: true,
+        logPrint: (o) => debugPrint(o.toString()),
+      ));
+    }
+    return dio;
+  }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
   Future<UserProfile> registerUser({
+    required String phoneNumber,
     required String name,
     required String city,
     required int urgencyThreshold,
@@ -28,11 +41,12 @@ class ApiService {
   }) async {
     final dio = await _dio;
     final resp = await dio.post('/users/register', data: {
+      'phone_number': phoneNumber,
       'name': name,
       'city': city,
       'urgency_threshold': urgencyThreshold,
-      'voice_language': voiceLanguage,
-      'voice_gender': voiceGender,
+      'ai_language': voiceLanguage,
+      'ai_voice_gender': voiceGender,
     });
     final data = resp.data as Map<String, dynamic>;
 
@@ -51,10 +65,11 @@ class ApiService {
 
   Future<UserProfile> loginUser({
     required String phone,
-    required String otp,
   }) async {
     final dio = await _dio;
-    final resp = await dio.post('/users/login', data: {'phone': phone, 'otp': otp});
+    final resp = await dio.post('/users/login', data: {
+      'phone_number': phone,
+    });
     final data = resp.data as Map<String, dynamic>;
 
     if (data['token'] != null) {
@@ -93,9 +108,13 @@ class ApiService {
       fcmToken: fcmToken,
     );
     final dio = await _dio;
-    await dio.put('/users/preferences', data: {
-      'user_id': userId,
-      ...profile.toPreferencesJson(),
+    await dio.put('/users/preferences/$userId', data: {
+      'urgency_threshold': urgencyThreshold,
+      'ai_language': voiceLanguage,
+      'ai_voice_gender': voiceGender,
+      'auto_block_scam': false,
+      'telegram_alerts': telegramChatId != null,
+      'fcm_token': fcmToken,
     });
   }
 
@@ -111,6 +130,8 @@ class ApiService {
     }
   }
 
+  String? _lastSavedCallId;
+
   Future<CallRecord> saveCallRecord({
     required String callId,
     required String number,
@@ -120,17 +141,22 @@ class ApiService {
     int? durationSeconds,
     String? callOutcome,
   }) async {
+    if (callId == _lastSavedCallId) {
+      throw Exception('Record already saved for this callId');
+    }
+    _lastSavedCallId = callId;
+
     final userId = await _storage.read(key: kStorageUserId) ?? '';
     final dio = await _dio;
     final resp = await dio.post('/calls/save-record', data: {
-      'call_id': callId,
       'user_id': userId,
-      'number': number,
-      'transcript': transcript,
-      'category': category,
-      'urgency_score': urgencyScore,
-      'duration_seconds': durationSeconds,
-      'call_outcome': callOutcome,
+      'call_id': callId,
+      'caller_number': number,
+      'transcript': transcript.isNotEmpty ? transcript : 'No transcript recorded',
+      'duration_seconds': durationSeconds ?? 0,
+      'final_action': callOutcome ?? 'END_CALL',
+      'final_category': category ?? 'UNKNOWN',
+      'final_urgency': urgencyScore ?? 5,
     });
     return CallRecord.fromJson(resp.data as Map<String, dynamic>);
   }
@@ -138,26 +164,37 @@ class ApiService {
   Future<Map<String, dynamic>> processCallTurn({
     required String callId,
     required String audioBase64,
+    required String callerNumber,
+    required String transcriptTurn,
+    required List<Map<String, String>> conversationHistory,
   }) async {
+    final userId = await _storage.read(key: kStorageUserId) ?? '';
     final dio = await _dio;
     final resp = await dio.post('/calls/process-turn', data: {
+      'user_id': userId,
       'call_id': callId,
-      'audio': audioBase64,
+      'caller_number': callerNumber,
+      'transcript_turn': transcriptTurn,
+      'conversation_history': conversationHistory,
     });
     return resp.data as Map<String, dynamic>;
   }
 
-  Future<List<CallRecord>> getCallHistory(String userId) async {
-    final dio = await _dio;
-    final resp = await dio.get('/calls/history/$userId');
-    final list = resp.data as List;
-    return list.map((e) => CallRecord.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
+// After:
+Future<List<UnifiedCallEntry>> getCallHistory(String userId) async {
+  if (userId.isEmpty) return [];
+  final dio = await _dio;
+  final resp = await dio.get('/calls/history/$userId');
+  final list = resp.data as List;
+  return list.map((e) => UnifiedCallEntry.fromApiJson(e as Map<String, dynamic>)).toList();
+}
   Future<List<UnifiedCallEntry>> getRecentCalls({int limit = 3}) async {
     try {
+      final userId = await _storage.read(key: kStorageUserId) ?? '';
+      if (userId.isEmpty) return [];
+      
       final dio = await _dio;
-      final resp = await dio.get('/calls/recent', queryParameters: {'limit': limit});
+      final resp = await dio.get('/calls/recent/$userId');
       final list = resp.data as List;
       return list
           .map((e) => UnifiedCallEntry.fromApiJson(e as Map<String, dynamic>))

@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants.dart';
+import '../core/theme.dart';
 import '../services/api_service.dart';
 import '../widgets/voice_settings_widget.dart';
 
@@ -17,24 +18,20 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  static const _setupChannel = MethodChannel(kChannelSetup);
+  static const _channel = MethodChannel('com.zentra.dialer/call_control');
   final _storage = const FlutterSecureStorage();
   final _api = ApiService();
 
   int _step = 0;
 
-  // Step 1
   final _nameCtrl = TextEditingController();
   final _cityCtrl = TextEditingController();
 
-  // Step 2
   double _urgencyThreshold = kDefaultUrgencyThreshold.toDouble();
 
-  // Step 3
   String _voiceLanguage = 'Hindi';
   String _voiceGender = 'Female';
 
-  // Step 4 permissions
   final Map<String, bool> _permissions = {
     'Phone': false,
     'Contacts': false,
@@ -59,40 +56,75 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       Permission.contacts,
       Permission.microphone,
       Permission.notification,
-      Permission.phone,
     ].request();
-
     setState(() {
       _permissions['Phone'] = statuses[Permission.phone]?.isGranted ?? false;
-      _permissions['Contacts'] = statuses[Permission.contacts]?.isGranted ?? false;
-      _permissions['Microphone'] = statuses[Permission.microphone]?.isGranted ?? false;
-      _permissions['Notifications'] = statuses[Permission.notification]?.isGranted ?? false;
-      _permissions['Call Logs'] = statuses[Permission.phone]?.isGranted ?? false;
+      _permissions['Contacts'] =
+          statuses[Permission.contacts]?.isGranted ?? false;
+      _permissions['Microphone'] =
+          statuses[Permission.microphone]?.isGranted ?? false;
+      _permissions['Notifications'] =
+          statuses[Permission.notification]?.isGranted ?? false;
+      _permissions['Call Logs'] =
+          statuses[Permission.phone]?.isGranted ?? false;
     });
+  }
+
+  Future<void> _setDefaultDialer() async {
+    try {
+      final result = await _channel.invokeMethod('setDefaultDialer');
+      if (result == true) {
+        setState(() => _isDefaultDialer = true);
+      } else {
+        await Future.delayed(const Duration(milliseconds: 1500));
+        final check = await _channel.invokeMethod('checkDefaultDialer');
+        setState(() => _isDefaultDialer = check == true);
+        if (check != true && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select Zentra as default phone app')),
+          );
+        }
+      }
+    } catch (e) {
+      await Future.delayed(const Duration(milliseconds: 1500));
+      try {
+        final check = await _channel.invokeMethod('checkDefaultDialer');
+        setState(() => _isDefaultDialer = check == true);
+      } catch (_) {}
+    }
   }
 
   Future<void> _requestDefaultDialer() async {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Set as Default Dialer'),
+        backgroundColor: kSurface,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Set as Default Dialer',
+            style: TextStyle(
+                fontWeight: FontWeight.w700, color: kTextPrimary)),
         content: const Text(
           'Zentra needs to be your default phone app to screen incoming calls. '
           'Your contacts and known callers will always ring normally — only unknown numbers will be screened by AI.',
+          style: TextStyle(color: kTextSecondary, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await _setupChannel.invokeMethod('requestDefaultDialer');
-              final isDefault = await _setupChannel.invokeMethod<bool>('isDefaultDialer') ?? false;
-              setState(() => _isDefaultDialer = isDefault);
+              await _setDefaultDialer();
             },
-            child: const Text('Set Zentra as Default'),
+            style: FilledButton.styleFrom(
+              minimumSize: Size.zero,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: const Text('Set as Default'),
           ),
         ],
       ),
@@ -102,14 +134,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _finishOnboarding() async {
     setState(() => _loading = true);
     try {
-      await _storage.write(key: kStorageUserName, value: _nameCtrl.text.trim());
-      await _storage.write(key: kStorageUserCity, value: _cityCtrl.text.trim());
       await _storage.write(
-          key: kStorageUrgencyThreshold, value: _urgencyThreshold.round().toString());
+          key: kStorageUserName, value: _nameCtrl.text.trim());
+      await _storage.write(
+          key: kStorageUserCity, value: _cityCtrl.text.trim());
+      await _storage.write(
+          key: kStorageUrgencyThreshold,
+          value: _urgencyThreshold.round().toString());
       await _storage.write(key: kStorageVoiceLanguage, value: _voiceLanguage);
       await _storage.write(key: kStorageVoiceGender, value: _voiceGender);
 
+      final phone = await _storage.read(key: 'phone_number') ?? '';
+
       await _api.registerUser(
+        phoneNumber: phone,
         name: _nameCtrl.text.trim(),
         city: _cityCtrl.text.trim(),
         urgencyThreshold: _urgencyThreshold.round(),
@@ -126,8 +164,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
       setState(() => _loading = false);
     }
@@ -135,26 +175,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme;
-
     return Scaffold(
-      backgroundColor: color.surface,
+      backgroundColor: kSurface,
       body: SafeArea(
         child: Column(
           children: [
-            // Progress indicator
+            // ── Progress bar ────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Row(
                 children: List.generate(5, (i) {
+                  final isFilled = i <= _step;
                   return Expanded(
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
                       height: 4,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
                       decoration: BoxDecoration(
-                        color: i <= _step ? color.primary : color.surfaceVariant,
-                        borderRadius: BorderRadius.circular(2),
+                        color: isFilled ? kPurpleDark : kBorder,
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                   );
@@ -162,36 +201,58 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
             ),
 
+            // ── Step content ────────────────────────────────────────────────
             Expanded(
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
+                duration: const Duration(milliseconds: 280),
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.05, 0),
+                      end: Offset.zero,
+                    ).animate(CurvedAnimation(
+                        parent: anim, curve: Curves.easeOut)),
+                    child: child,
+                  ),
+                ),
                 child: _buildStep(_step),
               ),
             ),
 
-            // Navigation buttons
+            // ── Bottom nav buttons ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               child: Row(
                 children: [
                   if (_step > 0)
                     OutlinedButton(
                       onPressed: () => setState(() => _step--),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(80, 52),
+                      ),
                       child: const Text('Back'),
                     ),
                   const Spacer(),
                   FilledButton(
                     onPressed: _canProceed() ? _onNext : null,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(140, 52),
+                    ),
                     child: _loading
                         ? const SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: kPurpleDeep,
                             ),
                           )
-                        : Text(_step == 4 ? 'Get Started' : 'Continue'),
+                        : Text(
+                            _step == 4 ? '🚀  Get Started' : 'Continue',
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w600),
+                          ),
                   ),
                 ],
               ),
@@ -206,7 +267,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (_loading) return false;
     switch (_step) {
       case 0:
-        return _nameCtrl.text.trim().isNotEmpty && _cityCtrl.text.trim().isNotEmpty;
+        return _nameCtrl.text.trim().isNotEmpty &&
+            _cityCtrl.text.trim().isNotEmpty;
       case 4:
         return _isDefaultDialer;
       default:
@@ -239,48 +301,45 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
+  // ── Step 0 — Name & City ────────────────────────────────────────────────
   Widget _buildNameCityStep() {
-    return Padding(
+    return SingleChildScrollView(
       key: const ValueKey(0),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 32),
-          const Text('👋', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 16),
-          Text(
-            "Let's get started",
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
+          const _StepIcon(icon: Icons.waving_hand_rounded, color: kPurple),
+          const SizedBox(height: 20),
+          const Text("Let's get started",
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: kTextPrimary)),
           const SizedBox(height: 8),
-          Text(
-            'Tell us a little about yourself so we can personalise your experience.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyLarge
-                ?.copyWith(color: Colors.grey),
+          const Text(
+            'Tell us who you are so we can personalise your experience.',
+            style: TextStyle(fontSize: 14, color: kTextSecondary, height: 1.5),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
           TextField(
             controller: _nameCtrl,
             decoration: const InputDecoration(
               labelText: 'Your Name',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person_outline),
+              prefixIcon: Icon(Icons.person_outline_rounded),
             ),
+            textCapitalization: TextCapitalization.words,
             onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           TextField(
             controller: _cityCtrl,
             decoration: const InputDecoration(
               labelText: 'City',
-              border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.location_city_outlined),
             ),
+            textCapitalization: TextCapitalization.words,
             onChanged: (_) => setState(() {}),
           ),
         ],
@@ -288,87 +347,128 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
+  // ── Step 1 — Urgency ─────────────────────────────────────────────────────
   Widget _buildUrgencyStep() {
-    return Padding(
+    final trackColor = _urgencyThreshold >= 8
+        ? const Color(0xFFDC2626)
+        : _urgencyThreshold >= 5
+            ? const Color(0xFFEA580C)
+            : const Color(0xFF16A34A);
+
+    return SingleChildScrollView(
       key: const ValueKey(1),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 32),
-          const Text('⚡', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 16),
-          Text(
-            'Urgency Threshold',
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
+          const _StepIcon(icon: Icons.tune_rounded, color: kPurple),
+          const SizedBox(height: 20),
+          const Text('Urgency Threshold',
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: kTextPrimary)),
           const SizedBox(height: 8),
-          Text(
-            'When should Zentra alert you? Set the minimum urgency score for calls to pass through.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyLarge
-                ?.copyWith(color: Colors.grey),
+          const Text(
+            'Set how urgent a call must be before Zentra alerts you.',
+            style: TextStyle(fontSize: 14, color: kTextSecondary, height: 1.5),
           ),
-          const SizedBox(height: 48),
-          Center(
-            child: Text(
-              _urgencyThreshold.round().toString(),
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+          const SizedBox(height: 40),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: kBorder),
             ),
-          ),
-          Slider(
-            value: _urgencyThreshold,
-            min: kUrgencyMin.toDouble(),
-            max: kUrgencyMax.toDouble(),
-            divisions: 9,
-            label: _urgencyThreshold.round().toString(),
-            onChanged: (v) => setState(() => _urgencyThreshold = v),
-          ),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('1 - Alert for everything', style: TextStyle(fontSize: 12)),
-              Text('10 - Only critical calls', style: TextStyle(fontSize: 12)),
-            ],
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Alert threshold',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: kTextPrimary)),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: trackColor.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: trackColor.withOpacity(0.4), width: 1.5),
+                      ),
+                      child: Center(
+                        child: Text(
+                          _urgencyThreshold.round().toString(),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: trackColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: trackColor,
+                    thumbColor: trackColor,
+                    overlayColor: trackColor.withOpacity(0.15),
+                    inactiveTrackColor: kBorder,
+                  ),
+                  child: Slider(
+                    value: _urgencyThreshold,
+                    min: kUrgencyMin.toDouble(),
+                    max: kUrgencyMax.toDouble(),
+                    divisions: 9,
+                    onChanged: (v) => setState(() => _urgencyThreshold = v),
+                  ),
+                ),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('1 – All calls',
+                        style: TextStyle(fontSize: 11, color: kTextSecondary)),
+                    Text('10 – Critical only',
+                        style: TextStyle(fontSize: 11, color: kTextSecondary)),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
+  // ── Step 2 — Voice ───────────────────────────────────────────────────────
   Widget _buildVoiceStep() {
-    return Padding(
+    return SingleChildScrollView(
       key: const ValueKey(2),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 32),
-          const Text('🗣️', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 16),
-          Text(
-            'AI Voice Settings',
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
+          const _StepIcon(icon: Icons.record_voice_over_rounded, color: kPurple),
+          const SizedBox(height: 20),
+          const Text('AI Voice Settings',
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: kTextPrimary)),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Choose the voice and language for your AI call screener.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyLarge
-                ?.copyWith(color: Colors.grey),
+            style: TextStyle(fontSize: 14, color: kTextSecondary, height: 1.5),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
           VoiceSettingsWidget(
             language: _voiceLanguage,
             gender: _voiceGender,
@@ -384,45 +484,61 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
+  // ── Step 3 — Permissions ─────────────────────────────────────────────────
   Widget _buildPermissionsStep() {
-    return Padding(
+    final allGranted = _permissions.values.every((v) => v);
+    return SingleChildScrollView(
       key: const ValueKey(3),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 32),
-          const Text('🔐', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 16),
-          Text(
-            'Permissions',
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
+          const _StepIcon(icon: Icons.lock_rounded, color: kPurple),
+          const SizedBox(height: 20),
+          const Text('Permissions',
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: kTextPrimary)),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Zentra needs these permissions to screen calls and protect you.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyLarge
-                ?.copyWith(color: Colors.grey),
+            style: TextStyle(fontSize: 14, color: kTextSecondary, height: 1.5),
           ),
           const SizedBox(height: 24),
-          ..._permissions.entries.map(
-            (e) => _PermissionTile(
-              title: e.key,
-              granted: e.value,
+          Container(
+            decoration: BoxDecoration(
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: kBorder),
+            ),
+            child: Column(
+              children: _permissions.entries.map((e) {
+                final isLast =
+                    e.key == _permissions.keys.last;
+                return _PermissionTile(
+                  title: e.key,
+                  granted: e.value,
+                  isLast: isLast,
+                );
+              }).toList(),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: _requestAllPermissions,
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Grant All Permissions'),
+              icon: Icon(
+                allGranted
+                    ? Icons.check_circle_rounded
+                    : Icons.check_circle_outline_rounded,
+                color: allGranted ? Colors.green : kPurpleDeep,
+              ),
+              label: Text(
+                allGranted ? 'All Permissions Granted' : 'Grant All Permissions',
+              ),
             ),
           ),
         ],
@@ -430,72 +546,102 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
+  // ── Step 4 — Default dialer ──────────────────────────────────────────────
   Widget _buildDefaultDialerStep() {
-    return Padding(
+    return SingleChildScrollView(
       key: const ValueKey(4),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 32),
-          const Text('📱', style: TextStyle(fontSize: 48)),
-          const SizedBox(height: 16),
-          Text(
-            'Set as Default Dialer',
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
+          const _StepIcon(icon: Icons.phone_android_rounded, color: kPurple),
+          const SizedBox(height: 20),
+          const Text('Set as Default Dialer',
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: kTextPrimary)),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'This is the final step. Zentra must be your default phone app to intercept and screen unknown calls.',
-            style: Theme.of(context)
-                .textTheme
-                .bodyLarge
-                ?.copyWith(color: Colors.grey),
+            style: TextStyle(fontSize: 14, color: kTextSecondary, height: 1.5),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
+
+          // Info card
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
-              borderRadius: BorderRadius.circular(12),
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: kBorder),
             ),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.shield_outlined, color: Color(0xFF4F46E5)),
-                    SizedBox(width: 8),
-                    Text('What this means:', fontWeight: FontWeight.bold),
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: kPurple.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.shield_rounded,
+                          color: kPurpleDeep, size: 16),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text('What this means',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: kTextPrimary,
+                            fontSize: 14)),
                   ],
                 ),
-                SizedBox(height: 8),
-                Text('• Your contacts always ring normally'),
-                Text('• Emergency numbers are never intercepted'),
-                Text('• Unknown numbers are screened by AI'),
-                Text('• You control who gets through'),
+                const SizedBox(height: 14),
+                for (final item in [
+                  'Your contacts always ring normally',
+                  'Emergency numbers are never intercepted',
+                  'Unknown numbers are screened by AI',
+                  'You control who gets through',
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_rounded,
+                            size: 15, color: kPurpleDark),
+                        const SizedBox(width: 10),
+                        Text(item,
+                            style: const TextStyle(
+                                fontSize: 13, color: kTextPrimary)),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+
           if (_isDefaultDialer)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green),
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFF86EFAC)),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text('Zentra is your default dialer!',
-                      style: TextStyle(
-                          color: Colors.green, fontWeight: FontWeight.bold)),
+                  Icon(Icons.check_circle_rounded, color: Colors.green),
+                  SizedBox(width: 10),
+                  Text(
+                    'Zentra is your default dialer!',
+                    style: TextStyle(
+                        color: Color(0xFF16A34A), fontWeight: FontWeight.w600),
+                  ),
                 ],
               ),
             )
@@ -504,7 +650,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: _requestDefaultDialer,
-                icon: const Icon(Icons.phone_android),
+                icon: const Icon(Icons.phone_android_rounded),
                 label: const Text('Make Zentra Default Dialer'),
               ),
             ),
@@ -514,26 +660,90 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 }
 
-class _PermissionTile extends StatelessWidget {
-  final String title;
-  final bool granted;
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper Widgets
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const _PermissionTile({required this.title, required this.granted});
+class _StepIcon extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  const _StepIcon({required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(
-            granted ? Icons.check_circle : Icons.radio_button_unchecked,
-            color: granted ? Colors.green : Colors.grey,
-          ),
-          const SizedBox(width: 12),
-          Text(title, style: const TextStyle(fontSize: 16)),
-        ],
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(16),
       ),
+      child: Icon(icon, color: kPurpleDeep, size: 28),
+    );
+  }
+}
+
+class _PermissionTile extends StatelessWidget {
+  final String title;
+  final bool granted;
+  final bool isLast;
+
+  const _PermissionTile({
+    required this.title,
+    required this.granted,
+    required this.isLast,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: granted
+                      ? const Color(0xFFDCFCE7)
+                      : kCardBg,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: granted ? const Color(0xFF86EFAC) : kBorder,
+                  ),
+                ),
+                child: Icon(
+                  granted
+                      ? Icons.check_rounded
+                      : Icons.circle_outlined,
+                  size: 15,
+                  color: granted ? Colors.green : kTextSecondary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: kTextPrimary)),
+              const Spacer(),
+              Text(
+                granted ? 'Granted' : 'Required',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: granted ? Colors.green : kTextSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!isLast)
+          const Divider(height: 1, indent: 16, endIndent: 16),
+      ],
     );
   }
 }
@@ -543,12 +753,14 @@ class MainShellRedirect extends StatelessWidget {
   const MainShellRedirect({super.key});
   @override
   Widget build(BuildContext context) {
-    // Navigate to root which rebuilds with onboarding_complete = true
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Navigator.of(context).pushNamedAndRemoveUntil('/main', (_) => false);
     });
     return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+      backgroundColor: kSurface,
+      body: Center(
+        child: CircularProgressIndicator(color: kPurpleDark, strokeWidth: 2),
+      ),
     );
   }
 }

@@ -229,13 +229,13 @@ class _ExpandedBody extends StatelessWidget {
 
         // Transcript
         if (record.transcript != null && record.transcript!.isNotEmpty) ...[
-          _SectionLabel(label: 'Transcript'),
+          const _SectionLabel(label: 'Transcript'),
           const SizedBox(height: 6),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.surfaceVariant.withOpacity(0.6),
+              color: color.surfaceContainerHighest.withOpacity(0.6),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -249,7 +249,7 @@ class _ExpandedBody extends StatelessWidget {
 
         // AI Summary
         if (record.aiSummary != null && record.aiSummary!.isNotEmpty) ...[
-          _SectionLabel(label: 'AI Summary'),
+          const _SectionLabel(label: 'AI Summary'),
           const SizedBox(height: 6),
           Text(
             record.aiSummary!,

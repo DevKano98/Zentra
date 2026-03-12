@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 
 import '../core/constants.dart';
 
@@ -31,9 +32,9 @@ class CategoryBadge extends StatelessWidget {
     final label = showEmoji && emoji.isNotEmpty ? '$emoji $cat' : cat;
 
     final (fontSize, hPad, vPad, radius) = switch (size) {
-      BadgeSize.small => (10.0, 7.0, 2.0, 6.0),
-      BadgeSize.medium => (12.0, 10.0, 4.0, 8.0),
-      BadgeSize.large => (14.0, 14.0, 6.0, 10.0),
+      BadgeSize.small => (10.0, 8.0, 3.0, 20.0),
+      BadgeSize.medium => (12.0, 12.0, 5.0, 24.0),
+      BadgeSize.large => (14.0, 16.0, 6.0, 30.0),
     };
 
     return Container(
@@ -41,7 +42,7 @@ class CategoryBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: textColor.withOpacity(0.25), width: 1),
+        border: Border.all(color: textColor.withOpacity(0.15), width: 1),
       ),
       child: Text(
         label,
@@ -139,4 +140,27 @@ class _CategoryFilterRowState extends State<CategoryFilterRow> {
       ),
     );
   }
+}
+
+@Preview(name: 'Category Badge Previews')
+Widget previewCategoryBadge() {
+  return MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const CategoryBadge(category: 'SCAM', size: BadgeSize.large, showEmoji: true),
+            const SizedBox(height: 16),
+            const CategoryBadge(category: 'LEGITIMATE', size: BadgeSize.medium),
+            const SizedBox(height: 16),
+            CategoryFilterRow(categories: const ['SCAM', 'OTP', 'DELIVERY'], onChanged: (val) {}),
+          ],
+        ),
+      ),
+    ),
+  );
 }
