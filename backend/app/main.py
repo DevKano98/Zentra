@@ -118,9 +118,8 @@ async def websocket_call(websocket: WebSocket, call_id: str):
     await websocket.accept()
     logger.info(f"WebSocket call connected: {call_id}")
 
-    transcript_buffer = []
     conversation_history = []
-
+    
     user_prefs = {
         "user_name": "User",
         "user_city": "India",
@@ -144,6 +143,7 @@ async def websocket_call(websocket: WebSocket, call_id: str):
     except Exception as e:
         logger.warning(f"Init message error: {e}")
 
+    # Build prompt and greeting
     system_prompt = build_system_prompt(
         user_name=user_prefs["user_name"],
         user_city=user_prefs["user_city"],
@@ -152,6 +152,11 @@ async def websocket_call(websocket: WebSocket, call_id: str):
         ai_voice_gender=user_prefs["ai_voice_gender"],
     )
 
+    # Initial greeting logic
+    ai_name = "Divya" if user_prefs["ai_voice_gender"] == "female" else "Rohan"
+    gender_phrase = "bol rahi hoon" if user_prefs["ai_voice_gender"] == "female" else "bol raha hoon"
+    greeting_text = f"Namaste, main {ai_name} hoon, {user_prefs['user_name']} ki taraf se {gender_phrase}. Main aapki kya madad kar sakti hoon?"
+    
     async def process_and_respond(transcript_turn: str):
         conversation_history.append(
             {"role": "user", "parts": [{"text": transcript_turn}]}
@@ -208,6 +213,9 @@ async def websocket_call(websocket: WebSocket, call_id: str):
 
     stt_session = SarvamStreamingSession(on_transcript_callback=on_transcript)
     await stt_session.start()
+
+    # Send initial greeting
+    asyncio.create_task(process_and_respond(f"[SYSTEM: This is your first turn. Introduce yourself as {ai_name} and greet the caller with: {greeting_text}]"))
 
     try:
         while True:

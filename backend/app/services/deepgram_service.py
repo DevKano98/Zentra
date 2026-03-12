@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 SARVAM_STT_URL = "https://api.sarvam.ai/speech-to-text"
 SARVAM_STT_MODEL = "saarika:v2"
 SAMPLE_RATE = 16000
-CHUNK_DURATION_MS = 3000   # Accumulate 3 seconds before sending
-CHUNK_SIZE_BYTES = SAMPLE_RATE * 2 * (CHUNK_DURATION_MS // 1000)  # 96000 bytes
+CHUNK_DURATION_MS = 2000   # Reduced to 2 seconds for faster response
+CHUNK_SIZE_BYTES = SAMPLE_RATE * 2 * (CHUNK_DURATION_MS // 1000)  # 64000 bytes
 
 
 def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = 16000) -> bytes:
@@ -108,12 +108,15 @@ class SarvamStreamingSession:
             pcm_data = bytes(self._audio_buffer)
             self._audio_buffer.clear()
 
+        logger.info(f"STT: Flushing {len(pcm_data)} bytes to Sarvam...")
         transcript = await _sarvam_transcribe(pcm_data)
         if transcript:
             try:
                 await self.on_transcript(transcript)
             except Exception as e:
                 logger.warning(f"Transcript callback error: {e}")
+        else:
+            logger.debug("STT: No transcript found for this chunk")
 
     async def send_audio(self, audio_bytes: bytes):
         """Buffer incoming PCM audio chunk."""
@@ -121,8 +124,12 @@ class SarvamStreamingSession:
             async with self._lock:
                 self._audio_buffer.extend(audio_bytes)
 
-            # If buffer is very large (>10 seconds), flush immediately
-            if len(self._audio_buffer) > SAMPLE_RATE * 2 * 10:
+            # Debug log every ~100 chunks to avoid spamming
+            if len(self._audio_buffer) % (3200 * 10) == 0:
+                logger.debug(f"STT: Buffer size is {len(self._audio_buffer)} bytes")
+
+            # If buffer is very large (>5 seconds), flush immediately
+            if len(self._audio_buffer) > SAMPLE_RATE * 2 * 5:
                 await self._flush()
 
     async def stop(self):
