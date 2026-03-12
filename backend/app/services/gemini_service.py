@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Module-level client — one connection, reused across all requests
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
-MODEL  = "gemini-1.5-flash"
+MODEL  = "gemini-2.5-flash-lite"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # System prompt builder
