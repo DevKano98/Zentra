@@ -207,11 +207,11 @@ Future<List<UnifiedCallEntry>> getCallHistory(String userId) async {
   Future<Map<String, int>> getCallStats() async {
     try {
       final dio = await _dio;
-      final resp = await dio.get('/calls/stats');
+      final resp = await dio.get('/dashboard/statistics');
       final data = resp.data as Map<String, dynamic>;
       return {
-        'today': data['calls_today'] as int? ?? 0,
-        'scams': data['scams_blocked'] as int? ?? 0,
+        'today': data['total_calls'] as int? ?? 0,
+        'scams': data['scam_calls'] as int? ?? 0,
       };
     } catch (_) {
       return {'today': 0, 'scams': 0};

@@ -42,7 +42,6 @@ class DeepgramStreamingSession:
                 model="nova-3",
                 encoding="linear16",
                 sample_rate=16000,
-                language="hi",
             ) as conn:
 
                 def on_message(message):
