@@ -1,109 +1,142 @@
+"""
+backend/app/services/deepgram_service.py
+
+Speech-to-text using Sarvam AI STT API.
+Replaces Deepgram — same interface, drop-in replacement.
+Sarvam handles Hindi far better than Deepgram nova-3.
+
+API: POST https://api.sarvam.ai/speech-to-text
+Header: api-subscription-key: SARVAM_API_KEY
+Body: multipart/form-data
+  - file: audio bytes (WAV, 16kHz, mono, 16-bit PCM)
+  - model: saarika:v2
+  - language_code: hi-IN
+Response: {"transcript": "..."}
+"""
 
 import asyncio
+import io
 import logging
-from deepgram import DeepgramClient
-from deepgram.core.events import EventType
+import struct
+import wave
+import httpx
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_dg_client = DeepgramClient(api_key=settings.DEEPGRAM_API_KEY)
+SARVAM_STT_URL = "https://api.sarvam.ai/speech-to-text"
+SARVAM_STT_MODEL = "saarika:v2"
+SAMPLE_RATE = 16000
+CHUNK_DURATION_MS = 3000   # Accumulate 3 seconds before sending
+CHUNK_SIZE_BYTES = SAMPLE_RATE * 2 * (CHUNK_DURATION_MS // 1000)  # 96000 bytes
+
+
+def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = 16000) -> bytes:
+    """Convert raw PCM bytes to WAV format for Sarvam API."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)   # 16-bit
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_bytes)
+    return buf.getvalue()
+
+
+async def _sarvam_transcribe(pcm_bytes: bytes) -> str:
+    """Send PCM audio to Sarvam STT and return transcript."""
+    if len(pcm_bytes) < 3200:   # Less than 100ms — skip
+        return ""
+
+    wav_bytes = _pcm_to_wav(pcm_bytes)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                SARVAM_STT_URL,
+                headers={"api-subscription-key": settings.SARVAM_API_KEY},
+                files={"file": ("audio.wav", wav_bytes, "audio/wav")},
+                data={
+                    "model": SARVAM_STT_MODEL,
+                    "language_code": "hi-IN",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            transcript = data.get("transcript", "").strip()
+            if transcript:
+                logger.info(f"Sarvam STT transcript: {transcript[:80]}")
+            return transcript
+
+    except httpx.HTTPStatusError as e:
+        logger.warning(f"Sarvam STT HTTP error {e.response.status_code}: {e.response.text[:200]}")
+        return ""
+    except Exception as e:
+        logger.warning(f"Sarvam STT error: {e}")
+        return ""
 
 
 class DeepgramStreamingSession:
     """
-    Wraps Deepgram v2 live transcription for use inside FastAPI async context.
-    
-    Usage:
-        session = DeepgramStreamingSession(on_transcript_callback)
-        await session.start()
-        await session.send_audio(pcm_bytes)
-        await session.stop()
+    Drop-in replacement for Deepgram using Sarvam STT.
+    Accumulates PCM chunks and sends every 3 seconds.
+    Same interface as before — nothing else needs to change.
     """
 
     def __init__(self, on_transcript_callback):
         self.on_transcript = on_transcript_callback
-        self._audio_queue: asyncio.Queue = asyncio.Queue()
+        self._audio_buffer = bytearray()
         self._running = False
         self._task: asyncio.Task | None = None
-        self._loop: asyncio.AbstractEventLoop | None = None
+        self._lock = asyncio.Lock()
 
     async def start(self):
-        """Start the Deepgram streaming session."""
         self._running = True
-        self._loop = asyncio.get_event_loop()
-        self._task = asyncio.create_task(self._run())
-        logger.info("Deepgram streaming session started")
+        self._task = asyncio.create_task(self._flush_loop())
+        logger.info("Sarvam STT session started")
 
-    async def _run(self):
-        """Main loop — opens Deepgram connection and feeds audio from queue."""
-        try:
-            with _dg_client.listen.v2.connect(
-                model="nova-3",
-                encoding="linear16",
-                sample_rate=16000,
-            ) as conn:
+    async def _flush_loop(self):
+        """Every 3 seconds, send accumulated audio to Sarvam STT."""
+        while self._running:
+            await asyncio.sleep(CHUNK_DURATION_MS / 1000)
+            await self._flush()
 
-                def on_message(message):
-                    try:
-                        transcript = message.channel.alternatives[0].transcript
-                        if transcript and message.is_final:
-                            asyncio.run_coroutine_threadsafe(
-                                self.on_transcript(transcript),
-                                self._loop,
-                            )
-                    except Exception as e:
-                        logger.warning(f"Transcript parse error: {e}")
+    async def _flush(self):
+        """Send buffered audio to Sarvam and fire callback if transcript found."""
+        async with self._lock:
+            if len(self._audio_buffer) < 3200:
+                return
+            pcm_data = bytes(self._audio_buffer)
+            self._audio_buffer.clear()
 
-                def on_error(error):
-                    logger.error(f"Deepgram error: {error}")
-
-                def on_close(_):
-                    logger.info("Deepgram connection closed")
-
-                conn.on(EventType.MESSAGE, on_message)
-                conn.on(EventType.ERROR, on_error)
-                conn.on(EventType.CLOSE, on_close)
-                conn.start_listening()
-
-                # Feed audio chunks from async queue to Deepgram synchronously
-                while self._running:
-                    try:
-                        chunk = await asyncio.wait_for(
-                            self._audio_queue.get(),
-                            timeout=0.1,
-                        )
-                        conn.send(chunk)
-                    except asyncio.TimeoutError:
-                        continue
-                    except Exception as e:
-                        logger.warning(f"Audio chunk send error: {e}")
-                        break
-
-        except Exception as e:
-            logger.error(f"Deepgram session failed: {e}")
-        finally:
-            self._running = False
-            logger.info("Deepgram session ended")
+        transcript = await _sarvam_transcribe(pcm_data)
+        if transcript:
+            try:
+                await self.on_transcript(transcript)
+            except Exception as e:
+                logger.warning(f"Transcript callback error: {e}")
 
     async def send_audio(self, audio_bytes: bytes):
-        """Queue a PCM audio chunk for sending to Deepgram."""
+        """Buffer incoming PCM audio chunk."""
         if self._running and audio_bytes:
-            await self._audio_queue.put(audio_bytes)
+            async with self._lock:
+                self._audio_buffer.extend(audio_bytes)
+
+            # If buffer is very large (>10 seconds), flush immediately
+            if len(self._audio_buffer) > SAMPLE_RATE * 2 * 10:
+                await self._flush()
 
     async def stop(self):
-        """Stop the session gracefully."""
+        """Stop session and flush any remaining audio."""
         self._running = False
+
         if self._task and not self._task.done():
+            self._task.cancel()
             try:
-                await asyncio.wait_for(self._task, timeout=3.0)
-            except asyncio.TimeoutError:
-                self._task.cancel()
-                try:
-                    await self._task
-                except asyncio.CancelledError:
-                    pass
-        self._task = None
-        logger.info("Deepgram session stopped")
+                await self._task
+            except asyncio.CancelledError:
+                pass
 
-
+        # Final flush
+        await self._flush()
+        self._audio_buffer.clear()
+        logger.info("Sarvam STT session stopped")
