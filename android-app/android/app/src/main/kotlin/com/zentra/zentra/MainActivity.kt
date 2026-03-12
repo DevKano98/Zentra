@@ -68,6 +68,11 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "No audio bytes provided", null)
                     }
                 }
+                "startScreening" -> {
+                    // Tell InCallService to auto-answer the call for AI screening
+                    InCallServiceHolder.instance?.startScreeningMode()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

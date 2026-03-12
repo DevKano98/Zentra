@@ -36,14 +36,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkDefaultDialer();
-    
-    _channel.setMethodCallHandler((call) async {
-      if (call.method == 'incomingScreeningCall') {
-        final number = call.arguments['caller_number'] as String;
-        final callId = call.arguments['call_id'] as String;
-        ref.read(callManagerProvider.notifier).onIncomingScreeningCall(number, callId);
-      }
-    });
   }
 
   @override

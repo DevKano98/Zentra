@@ -27,6 +27,7 @@ class InCallService : InCallService() {
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
     private var isCapturing = false
+    private var isScreeningCall = false  // Set by Flutter when AI screening is active
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onCreate() {
@@ -37,6 +38,7 @@ class InCallService : InCallService() {
     override fun onDestroy() {
         super.onDestroy()
         stopAudioCapture()
+        isScreeningCall = false
         serviceScope.cancel()
         InCallServiceHolder.instance = null
     }
@@ -44,6 +46,17 @@ class InCallService : InCallService() {
     private fun getChannel(): MethodChannel? {
         val engine = FlutterEngineCache.getInstance().get("main_engine") ?: return null
         return MethodChannel(engine.dartExecutor.binaryMessenger, CHANNEL)
+    }
+
+    /// Called by Flutter when AI screening is being set up for this call
+    fun startScreeningMode() {
+        isScreeningCall = true
+        // If call is already ringing, auto-answer it for AI screening
+        currentCall?.let { call ->
+            if (call.state == Call.STATE_RINGING) {
+                call.answer(0)  // Answer silently; audio capture starts in STATE_ACTIVE callback
+            }
+        }
     }
 
     override fun onCallAdded(call: Call) {
@@ -106,6 +119,7 @@ class InCallService : InCallService() {
         stopAudioCapture()
         notifyCallEnded()
         currentCall = null
+        isScreeningCall = false
     }
 
     private fun startAudioCapture() {
@@ -121,7 +135,7 @@ class InCallService : InCallService() {
         val bufferSize = maxOf(minBufferSize, SAMPLE_RATE_RECORD / 10 * 2)
 
         audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
             SAMPLE_RATE_RECORD,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
@@ -167,6 +181,18 @@ class InCallService : InCallService() {
 
     fun playAudioBytes(audioBytes: ByteArray) {
         serviceScope.launch {
+            // Sarvam TTS returns WAV with 44-byte header; AudioTrack needs raw PCM
+            val pcmBytes = if (audioBytes.size > 44 &&
+                audioBytes[0] == 'R'.code.toByte() &&
+                audioBytes[1] == 'I'.code.toByte() &&
+                audioBytes[2] == 'F'.code.toByte() &&
+                audioBytes[3] == 'F'.code.toByte()) {
+                audioBytes.copyOfRange(44, audioBytes.size)
+            } else {
+                audioBytes
+            }
+
+            if (pcmBytes.isEmpty()) return@launch
 
             val minBufferSize = AudioTrack.getMinBufferSize(
                 SAMPLE_RATE_PLAY,
@@ -174,7 +200,7 @@ class InCallService : InCallService() {
                 AudioFormat.ENCODING_PCM_16BIT
             )
 
-            val bufferSize = maxOf(minBufferSize, audioBytes.size)
+            val bufferSize = maxOf(minBufferSize, pcmBytes.size)
 
             val track = AudioTrack.Builder()
                 .setAudioAttributes(
@@ -194,10 +220,12 @@ class InCallService : InCallService() {
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
 
-            track.write(audioBytes, 0, audioBytes.size)
+            track.write(pcmBytes, 0, pcmBytes.size)
             track.play()
 
-            delay((audioBytes.size / (SAMPLE_RATE_PLAY * 2) * 1000L) + 200L)
+            // Duration = bytes / (sampleRate * 2 bytes per sample) * 1000ms + buffer
+            val durationMs = (pcmBytes.size.toLong() * 1000L) / (SAMPLE_RATE_PLAY * 2).toLong() + 300L
+            delay(durationMs)
 
             track.stop()
             track.release()

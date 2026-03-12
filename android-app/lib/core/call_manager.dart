@@ -8,6 +8,7 @@ import 'api_client.dart';
 import 'constants.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum CallState { 
   idle, 
@@ -125,12 +126,28 @@ class CallManager extends Notifier<CallManagerState> {
         onDone: () => _onWebSocketClosed(),
       );
 
-      // Send call metadata
+      // Send init message with user preferences
+      const storage = FlutterSecureStorage();
+      final userName = await storage.read(key: kStorageUserName) ?? 'User';
+      final userCity = await storage.read(key: kStorageUserCity) ?? 'India';
+      final voiceLang = await storage.read(key: kStorageVoiceLanguage) ?? 'Hindi';
+      final voiceGender = await storage.read(key: kStorageVoiceGender) ?? 'Female';
+      final threshold = await storage.read(key: kStorageUrgencyThreshold) ?? '7';
+
       _wsChannel!.sink.add(jsonEncode({
-        'type': 'call_start',
-        'number': number,
-        'call_id': callId,
+        'type': 'init',
+        'user_name': userName,
+        'user_city': userCity,
+        'ai_language': voiceLang.toLowerCase(),
+        'ai_voice_gender': voiceGender.toLowerCase(),
+        'urgency_threshold': int.tryParse(threshold) ?? 7,
       }));
+
+      // Tell Kotlin to auto-answer the call so audio flows to/from the caller.
+      // The InCallService will answer silently and start audio capture.
+      try {
+        await _audioChannel.invokeMethod('startScreening');
+      } catch (_) {}
     } catch (e) {
       await endCall(reason: 'Connection error');
     }
@@ -142,12 +159,9 @@ class CallManager extends Notifier<CallManagerState> {
   }
 
   Future<void> onCallStarted(String number, int androidState) async {
-    // If we're already screening this number, stay in screening state
+    // If we're already screening this number, DO NOT auto-answer or change state.
+    // Auto-answering during screening creates dual voice (caller hears both AI and user).
     if (state.state == CallState.incoming || state.state == CallState.active) {
-       // Auto-answer if it's ringing and we're ready
-       if (androidState == 2) { // STATE_RINGING
-         await _callChannel.invokeMethod('answerCurrentCall');
-       }
        return;
     }
 
@@ -194,10 +208,24 @@ class CallManager extends Notifier<CallManagerState> {
     if (state.state != CallState.active) return;
     if (_wsChannel == null) return;
 
-    _wsChannel!.sink.add(jsonEncode({
-      'type': 'audio',
-      'data': base64Encode(bytes),
-    }));
+    // Send raw PCM bytes directly — backend WebSocket expects binary frames
+    _wsChannel!.sink.add(bytes);
+  }
+
+  /// Accept the screened call — let the user talk to the caller directly.
+  /// Close the WebSocket (stops AI), transition to normal call state.
+  Future<void> acceptCall() async {
+    // Close AI pipeline
+    await _wsSubscription?.cancel();
+    await _wsChannel?.sink.close();
+    _wsSubscription = null;
+    _wsChannel = null;
+
+    // Transition to active_normal so the NormalCallScreen shows
+    state = state.copyWith(
+      state: CallState.active_normal,
+      activeSession: state.activeSession?.copyWith(state: CallState.active_normal),
+    );
   }
 
   Future<void> _onWebSocketMessage(String rawMessage) async {
@@ -210,10 +238,10 @@ class CallManager extends Notifier<CallManagerState> {
 
     final action = msg['action'] as String?;
     final transcriptDelta = msg['transcript_delta'] as String?;
-    final aiAudioB64 = msg['ai_audio_b64'] as String?;
+    final aiAudioB64 = msg['ai_audio_b64'] as String? ?? msg['audio_b64'] as String?;
     final category = msg['category'] as String?;
-    final urgencyScore = msg['urgency_score'] as int?;
-    final aiSummary = msg['ai_summary'] as String?;
+    final urgencyScore = msg['urgency_score'] as int? ?? (msg['urgency'] is int ? msg['urgency'] as int : null);
+    final aiResponse = msg['ai_response'] as String? ?? msg['text'] as String?;
 
     // Append live transcript
     if (transcriptDelta != null && transcriptDelta.isNotEmpty) {
@@ -225,13 +253,13 @@ class CallManager extends Notifier<CallManagerState> {
       );
     }
 
-    // Update classification
-    if (category != null) {
+    // Update classification and AI response
+    if (category != null || aiResponse != null) {
       state = state.copyWith(
         activeSession: state.activeSession?.copyWith(
           category: category,
           urgencyScore: urgencyScore,
-          aiSummary: aiSummary,
+          aiSummary: aiResponse,
         ),
       );
     }

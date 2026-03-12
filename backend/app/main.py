@@ -108,7 +108,7 @@ app.include_router(dashboard_router)
 app.include_router(integration_router)
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {"status": "ok", "version": "1.0.0"}
 
@@ -182,9 +182,13 @@ async def websocket_call(websocket: WebSocket, call_id: str):
 
             response_payload = {
                 "type": "ai_response",
+                "transcript_delta": transcript_turn,
                 "text": signals["clean_response"],
+                "ai_response": signals["clean_response"],
                 "audio_b64": audio_b64,
+                "ai_audio_b64": audio_b64,
                 "urgency": signals["urgency"],
+                "urgency_score": signals["urgency"],
                 "category": signals["category"],
                 "action": signals["action"],
             }
@@ -228,8 +232,15 @@ async def websocket_call(websocket: WebSocket, call_id: str):
             elif "text" in message:
                 try:
                     text_msg = json.loads(message["text"])
-                    if text_msg.get("type") == "ping":
+                    msg_type = text_msg.get("type", "")
+                    if msg_type == "ping":
                         await websocket.send_json({"type": "pong"})
+                    elif msg_type == "audio":
+                        # Fallback: Flutter may send audio as base64 JSON
+                        audio_b64 = text_msg.get("data", "")
+                        if audio_b64:
+                            audio_bytes = base64.b64decode(audio_b64)
+                            await stt_session.send_audio(audio_bytes)
                 except json.JSONDecodeError:
                     pass
 

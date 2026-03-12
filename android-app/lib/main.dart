@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/constants.dart';
-// Removed custom theme import
 import 'core/call_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/dialer_screen.dart';
@@ -13,7 +12,11 @@ import 'screens/call_history_screen.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/normal_call_screen.dart';
+import 'screens/call_screening_screen.dart';
 import 'services/notification_service.dart';
+
+/// Global navigator key — used to push screening screen from MethodChannel callbacks
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +48,7 @@ class _ZentraAppState extends ConsumerState<ZentraApp> {
   final MethodChannel _callChannel = const MethodChannel(kChannelCall);
   final MethodChannel _notificationsChannel = const MethodChannel(kChannelNotifications);
   final MethodChannel _setupChannel = const MethodChannel(kChannelSetup);
+  static const _callControlChannel = MethodChannel('com.zentra.dialer/call_control');
 
   @override
   void initState() {
@@ -94,11 +98,27 @@ class _ZentraAppState extends ConsumerState<ZentraApp> {
         debugPrint('Default dialer set: $isDefault');
       }
     });
+
+    // Call control channel — incoming screening calls from Kotlin
+    _callControlChannel.setMethodCallHandler((call) async {
+      if (call.method == 'incomingScreeningCall') {
+        final args = call.arguments as Map;
+        final callerNumber = args['caller_number'] as String? ?? '';
+        final callId = args['call_id'] as String? ?? '';
+        if (callerNumber.isNotEmpty) {
+          ref.read(callManagerProvider.notifier)
+              .onIncomingScreeningCall(callerNumber, callId);
+          // MainShell Stack overlay shows CallScreeningScreen automatically
+          // when state is incoming/active — no push needed here.
+        }
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Zentra',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -168,6 +188,8 @@ class _MainShellState extends State<MainShell> {
         final showCallUI = callState.state == CallState.ringing_normal || 
                            callState.state == CallState.outgoing ||
                            callState.state == CallState.active_normal;
+        final showScreeningUI = callState.state == CallState.incoming ||
+                                callState.state == CallState.active;
 
         return Stack(
           children: [
@@ -211,6 +233,13 @@ class _MainShellState extends State<MainShell> {
             if (showCallUI)
               const Positioned.fill(
                 child: NormalCallScreen(),
+              ),
+            if (showScreeningUI && callState.activeSession != null)
+              Positioned.fill(
+                child: CallScreeningScreen(
+                  callerNumber: callState.activeSession!.number,
+                  callId: callState.activeSession!.callId,
+                ),
               ),
           ],
         );

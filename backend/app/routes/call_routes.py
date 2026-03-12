@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi import Depends
 from pydantic import BaseModel
 from slowapi import Limiter
@@ -243,27 +243,35 @@ async def save_record(body: SaveRecordRequest):
         save_call_record(body.user_id, call_data)
     except Exception as e:
         logger.error(f"Supabase save failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-    user = get_user_by_id(body.user_id)
-    if user:
-        fcm_token = user.get("fcm_token")
-        telegram_chat_id = user.get("telegram_chat_id")
+    try:
+        user = get_user_by_id(body.user_id)
+        if user:
+            fcm_token = user.get("fcm_token")
+            telegram_chat_id = user.get("telegram_chat_id")
 
-        if fcm_token:
-            asyncio.create_task(
-                send_fcm_notification(
-                    fcm_token=fcm_token,
-                    title="📞 Call Screened" if not is_scam else "🚨 Scam Call Blocked",
-                    body=f"Category: {body.final_category} | Outcome: {call_outcome}",
-                    data={"call_id": body.call_id, "category": body.final_category or ""},
-                )
-            )
+            if fcm_token:
+                try:
+                    asyncio.create_task(
+                        send_fcm_notification(
+                            fcm_token=fcm_token,
+                            title="📞 Call Screened" if not is_scam else "🚨 Scam Call Blocked",
+                            body=f"Category: {body.final_category} | Outcome: {call_outcome}",
+                            data={"call_id": body.call_id, "category": body.final_category or ""},
+                        )
+                    )
+                except Exception as e:
+                    logger.warning(f"FCM notification failed: {e}")
 
-        if telegram_chat_id and is_scam:
-            asyncio.create_task(send_scam_alert_telegram(telegram_chat_id, call_data))
-        elif telegram_chat_id:
-            asyncio.create_task(send_call_summary_telegram(telegram_chat_id, call_data))
+            try:
+                if telegram_chat_id and is_scam:
+                    asyncio.create_task(send_scam_alert_telegram(telegram_chat_id, call_data))
+                elif telegram_chat_id:
+                    asyncio.create_task(send_call_summary_telegram(telegram_chat_id, call_data))
+            except Exception as e:
+                logger.warning(f"Telegram notification failed: {e}")
+    except Exception as e:
+        logger.warning(f"Post-save notifications failed: {e}")
 
     return {"status": "saved", "call_id": body.call_id, "blockchain_tx_hash": tx_hash}
 
@@ -278,6 +286,32 @@ async def call_history(user_id: str, limit: int = 50, offset: int = 0):
 async def recent_calls(user_id: str):
     records = get_recent_calls(user_id, limit=5)
     return {"calls": records}
+
+
+
+@router.get("/stats")
+async def get_call_stats(user_id: Optional[str] = Query(None)):
+    """Return total calls and scam count, optionally filtered by user_id."""
+    try:
+        from app.database.supabase_client import supabase
+
+        query = supabase.table("call_records").select("id", count="exact")
+        if user_id:
+            query = query.eq("user_id", user_id)
+        total = query.execute()
+
+        scam_query = supabase.table("call_records").select("id", count="exact").eq("category", "SCAM")
+        if user_id:
+            scam_query = scam_query.eq("user_id", user_id)
+        scam_result = scam_query.execute()
+
+        return {
+            "calls_today": total.count or 0,
+            "scams_blocked": scam_result.count or 0,
+        }
+    except Exception as e:
+        logger.warning(f"Stats query failed: {e}")
+        return {"calls_today": 0, "scams_blocked": 0}
 
 
 @router.post("/report-scam")
