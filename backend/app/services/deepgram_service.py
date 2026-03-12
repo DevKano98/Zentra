@@ -75,7 +75,7 @@ async def _sarvam_transcribe(pcm_bytes: bytes) -> str:
         return ""
 
 
-class DeepgramStreamingSession:
+class SarvamStreamingSession:
     """
     Drop-in replacement for Deepgram using Sarvam STT.
     Accumulates PCM chunks and sends every 3 seconds.

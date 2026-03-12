@@ -19,7 +19,7 @@ from app.routes.dashboard_routes import router as dashboard_router
 from app.routes.integration_routes import router as integration_router
 from app.routes.report_routes import router as report_router
 from app.routes.user_routes import router as user_router
-from app.services.deepgram_service import DeepgramStreamingSession
+from app.services.deepgram_service import SarvamStreamingSession
 from app.services.gemini_service import build_system_prompt, generate_response, parse_signals
 from app.services.notification_service import _firebase_initialized
 from app.services.tts_service import synthesize
@@ -206,8 +206,8 @@ async def websocket_call(websocket: WebSocket, call_id: str):
         # Process each transcript turn in its own task to avoid blocking the audio stream
         asyncio.create_task(process_and_respond(text))
 
-    deepgram_session = DeepgramStreamingSession(on_transcript_callback=on_transcript)
-    await deepgram_session.start()
+    stt_session = SarvamStreamingSession(on_transcript_callback=on_transcript)
+    await stt_session.start()
 
     try:
         while True:
@@ -215,7 +215,7 @@ async def websocket_call(websocket: WebSocket, call_id: str):
 
             if "bytes" in message and message["bytes"]:
                 audio_chunk = message["bytes"]
-                await deepgram_session.send_audio(audio_chunk)
+                await stt_session.send_audio(audio_chunk)
 
             elif "text" in message:
                 try:
@@ -230,7 +230,7 @@ async def websocket_call(websocket: WebSocket, call_id: str):
     except Exception as e:
         logger.error(f"WebSocket call error for {call_id}: {e}")
     finally:
-        await deepgram_session.stop()
+        await stt_session.stop()
         logger.info(f"WebSocket call session ended: {call_id}")
 
 
