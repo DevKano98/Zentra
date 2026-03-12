@@ -12,3 +12,5 @@ blockchain/cache/
 dashboard/dist/
 **/.dart_tool/
 **/build/
+backend/gmail_tokens/
+*.pickle
