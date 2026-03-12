@@ -1,0 +1,25 @@
+﻿venv\Scripts\python : D:\MyProjects\ZentraDialer\backend\ve
+nv\lib\site-packages\pytest_asyncio\plugin.py:207: 
+PytestDeprecationWarning: The configuration option 
+"asyncio_default_fixture_loop_scope" is unset.
+At line:1 char:1
++ venv\Scripts\python -m pytest tests/test_ml.py 
+--tb=short -q 2>&1 | O ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo          : NotSpecified: (D:\MyProjects 
+   \Z...cope" is unset.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+The event loop scope for asynchronous fixtures will 
+default to the fixture caching scope. Future versions of 
+pytest-asyncio will default the loop scope for 
+asynchronous fixtures to function scope. Set the default 
+fixture loop scope explicitly in order to avoid unexpected 
+behavior in the future. Valid fixture loop scopes are: 
+"function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_L
+OOP_SCOPE_UNSET))
+...........................................................              [100%]
+59 passed in 3.24s

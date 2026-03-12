@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Zentra FIR Report — {{ report_id }}</title>
+  <style>
+    @page {
+      margin: 2cm 2.5cm;
+      size: A4;
+      @top-center {
+        content: "ZENTRA — CONFIDENTIAL INCIDENT REPORT";
+        font-size: 9pt;
+        color: #888;
+      }
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 9pt;
+        color: #888;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      font-size: 10pt;
+      color: #1a1a2e;
+      line-height: 1.5;
+      background: #fff;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid #e63946;
+      padding-bottom: 12px;
+      margin-bottom: 20px;
+    }
+    .header-left h1 {
+      font-size: 22pt;
+      color: #e63946;
+      letter-spacing: 2px;
+      font-weight: 900;
+    }
+    .header-left p {
+      font-size: 9pt;
+      color: #555;
+      margin-top: 2px;
+    }
+    .header-right {
+      text-align: right;
+      font-size: 9pt;
+      color: #555;
+    }
+    .badge {
+      display: inline-block;
+      background: #e63946;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 9pt;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-top: 4px;
+    }
+    .badge.scam { background: #e63946; }
+    .badge.completed { background: #2a9d8f; }
+    .badge.blocked { background: #d62828; }
+    .badge.dismissed { background: #f4a261; }
+    .section {
+      margin-bottom: 18px;
+    }
+    .section-title {
+      font-size: 10pt;
+      font-weight: bold;
+      color: #e63946;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-left: 3px solid #e63946;
+      padding-left: 8px;
+      margin-bottom: 8px;
+    }
+    table.info-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+    }
+    table.info-table tr {
+      border-bottom: 1px solid #f0f0f0;
+    }
+    table.info-table td {
+      padding: 5px 8px;
+      vertical-align: top;
+    }
+    table.info-table td:first-child {
+      font-weight: bold;
+      color: #555;
+      width: 36%;
+      white-space: nowrap;
+    }
+    .urgency-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .urgency-bar {
+      height: 10px;
+      background: #f0f0f0;
+      border-radius: 5px;
+      width: 120px;
+      overflow: hidden;
+      display: inline-block;
+    }
+    .urgency-fill {
+      height: 100%;
+      background: {% if urgency_score >= 8 %}#e63946{% elif urgency_score >= 5 %}#f4a261{% else %}#2a9d8f{% endif %};
+      width: {{ urgency_score * 10 }}%;
+    }
+    .transcript-box {
+      background: #f8f8f8;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 12px;
+      font-size: 9pt;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 300px;
+      overflow: hidden;
+    }
+    .summary-box {
+      background: #fff8e6;
+      border-left: 4px solid #f4a261;
+      padding: 10px 14px;
+      font-size: 9.5pt;
+      border-radius: 0 4px 4px 0;
+    }
+    .blockchain-box {
+      background: #e8f5e9;
+      border: 1px solid #a5d6a7;
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-size: 8.5pt;
+      font-family: "DejaVu Sans Mono", monospace;
+      word-break: break-all;
+    }
+    .verification-url {
+      color: #1565c0;
+      font-size: 9pt;
+    }
+    .signature-section {
+      margin-top: 30px;
+      border-top: 1px solid #ccc;
+      padding-top: 18px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .sig-block {
+      width: 44%;
+    }
+    .sig-line {
+      border-bottom: 1px solid #333;
+      height: 24px;
+      margin-bottom: 4px;
+    }
+    .sig-label {
+      font-size: 8.5pt;
+      color: #555;
+    }
+    .footer {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 8pt;
+      color: #aaa;
+      border-top: 1px solid #eee;
+      padding-top: 8px;
+    }
+    .highlight-warning {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 8.5pt;
+      margin-bottom: 8px;
+      color: #856404;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <h1>ZENTRA</h1>
+      <p>AI Call Screening — Incident Report</p>
+    </div>
+    <div class="header-right">
+      <div>Report ID: <strong>{{ report_id }}</strong></div>
+      <div>Generated: {{ generated_at }}</div>
+      <div class="badge {{ call_outcome | lower }}">{{ call_outcome }}</div>
+    </div>
+  </div>
+
+  <!-- CALL DETAILS -->
+  <div class="section">
+    <div class="section-title">Call Information</div>
+    <table class="info-table">
+      <tr>
+        <td>Caller Number</td>
+        <td><strong>{{ caller_number }}</strong></td>
+      </tr>
+      <tr>
+        <td>Caller Name</td>
+        <td>{{ caller_name if caller_name else "Not identified" }}</td>
+      </tr>
+      <tr>
+        <td>Category</td>
+        <td><strong>{{ category }}</strong></td>
+      </tr>
+      <tr>
+        <td>Call Outcome</td>
+        <td><strong>{{ call_outcome }}</strong></td>
+      </tr>
+      <tr>
+        <td>Duration</td>
+        <td>{{ duration_seconds }} seconds</td>
+      </tr>
+      <tr>
+        <td>Date &amp; Time</td>
+        <td>{{ created_at }}</td>
+      </tr>
+      <tr>
+        <td>Urgency Score</td>
+        <td>
+          <div class="urgency-bar-wrap">
+            <strong>{{ urgency_score }}/10</strong>
+            <div class="urgency-bar"><div class="urgency-fill"></div></div>
+          </div>
+        </td>
+      </tr>
+      {% if lat and lng %}
+      <tr>
+        <td>Location</td>
+        <td>{{ lat }}, {{ lng }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td>User ID</td>
+        <td>{{ user_id }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-title">AI Call Summary</div>
+    <div class="summary-box">{{ summary }}</div>
+  </div>
+
+  <!-- TRANSCRIPT -->
+  <div class="section">
+    <div class="section-title">Call Transcript</div>
+    {% if category == 'SCAM' %}
+    <div class="highlight-warning">
+      ⚠️ Scam-related phrases have been highlighted in <span style="color:red;font-weight:bold;">RED</span> below.
+    </div>
+    {% endif %}
+    <div class="transcript-box">{{ highlighted_transcript | safe }}</div>
+  </div>
+
+  <!-- BLOCKCHAIN VERIFICATION -->
+  <div class="section">
+    <div class="section-title">Blockchain Verification</div>
+    <div class="blockchain-box">
+      <div><strong>Transaction Hash:</strong><br/>{{ blockchain_tx_hash }}</div>
+      <div style="margin-top: 8px;"><strong>Verification URL:</strong><br/>
+        <span class="verification-url">{{ verification_url }}</span>
+      </div>
+      <div style="margin-top: 8px; font-size: 8pt; color: #555;">
+        This call record has been cryptographically hashed and recorded on-chain.
+        The transaction hash above can be independently verified on any compatible blockchain explorer.
+      </div>
+    </div>
+  </div>
+
+  <!-- SIGNATURE BLOCK -->
+  <div class="signature-section">
+    <div class="sig-block">
+      <div class="sig-line"></div>
+      <div class="sig-label">Complainant / User Signature</div>
+      <div class="sig-label" style="margin-top: 4px;">Name: ____________________</div>
+      <div class="sig-label">Date: ____________________</div>
+    </div>
+    <div class="sig-block" style="text-align: right;">
+      <div class="sig-line"></div>
+      <div class="sig-label">Authorized Officer / Stamp</div>
+      <div class="sig-label" style="margin-top: 4px;">Name: ____________________</div>
+      <div class="sig-label">Date: ____________________</div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    This report was automatically generated by Zentra AI Call Screening System.
+    Report ID: {{ report_id }} &nbsp;|&nbsp; Generated: {{ generated_at }}
+    &nbsp;|&nbsp; zentra.app
+  </div>
+
+</body>
+</html>

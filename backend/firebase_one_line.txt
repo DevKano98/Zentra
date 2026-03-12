@@ -1,0 +1,1 @@
+FIREBASE_SERVICE_ACCOUNT=your_firebase_key_here

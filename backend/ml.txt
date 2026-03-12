@@ -1,0 +1,93 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.10.0, pytest-8.3.5, pluggy-1.6.0 -- D:\MyProjects\ZentraDialer\backend\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: D:\MyProjects\ZentraDialer\backend
+plugins: anyio-4.12.1, asyncio-0.25.3
+asyncio: mode=strict, asyncio_default_fixture_loop_scope=None
+collecting ... collected 59 items
+
+tests/test_ml.py::TestScamDetector::test_detect_scam_keywords_positive PASSED [  1%]
+tests/test_ml.py::TestScamDetector::test_detect_scam_keywords_hindi PASSED [  3%]
+tests/test_ml.py::TestScamDetector::test_detect_scam_keywords_clean PASSED [  5%]
+tests/test_ml.py::TestScamDetector::test_detect_scam_keywords_empty PASSED [  6%]
+tests/test_ml.py::TestScamDetector::test_detect_scam_keywords_returns_dict_shape PASSED [  8%]
+tests/test_ml.py::TestScamDetector::test_detect_otp_request_english PASSED [ 10%]
+tests/test_ml.py::TestScamDetector::test_detect_otp_request_hindi PASSED [ 11%]
+tests/test_ml.py::TestScamDetector::test_detect_otp_request_cvv PASSED   [ 13%]
+tests/test_ml.py::TestScamDetector::test_detect_otp_request_aadhaar PASSED [ 15%]
+tests/test_ml.py::TestScamDetector::test_detect_otp_request_clean PASSED [ 16%]
+tests/test_ml.py::TestScamDetector::test_detect_otp_request_empty PASSED [ 18%]
+tests/test_ml.py::TestScamDetector::test_single_keyword_not_scam PASSED  [ 20%]
+tests/test_ml.py::TestClassifier::test_classify_scam_transcript FAILED   [ 22%]
+tests/test_ml.py::TestClassifier::test_classify_medical_transcript PASSED [ 23%]
+tests/test_ml.py::TestClassifier::test_classify_delivery_transcript PASSED [ 25%]
+tests/test_ml.py::TestClassifier::test_classify_telemarketer_transcript PASSED [ 27%]
+tests/test_ml.py::TestClassifier::test_classify_bank_transcript FAILED   [ 28%]
+tests/test_ml.py::TestClassifier::test_classify_empty_returns_unknown PASSED [ 30%]
+tests/test_ml.py::TestClassifier::test_classify_returns_required_keys PASSED [ 32%]
+tests/test_ml.py::TestClassifier::test_classify_confidence_in_range PASSED [ 33%]
+tests/test_ml.py::TestClassifier::test_urgency_base_all_categories PASSED [ 35%]
+tests/test_ml.py::TestEmotionDetector::test_returns_neutral_fallback_on_empty PASSED [ 37%]
+tests/test_ml.py::TestEmotionDetector::test_returns_neutral_on_503 PASSED [ 38%]
+tests/test_ml.py::TestEmotionDetector::test_returns_neutral_on_request_exception PASSED [ 40%]
+tests/test_ml.py::TestEmotionDetector::test_parses_anger_correctly PASSED [ 42%]
+tests/test_ml.py::TestEmotionDetector::test_parses_joy_gives_negative_modifier PASSED [ 44%]
+tests/test_ml.py::TestEmotionDetector::test_result_has_required_keys PASSED [ 45%]
+tests/test_ml.py::TestGeminiService::test_parse_signals_urgency_and_category PASSED [ 47%]
+tests/test_ml.py::TestGeminiService::test_parse_signals_block_scam PASSED [ 49%]
+tests/test_ml.py::TestGeminiService::test_parse_signals_block_otp PASSED [ 50%]
+tests/test_ml.py::TestGeminiService::test_parse_signals_end_call PASSED  [ 52%]
+tests/test_ml.py::TestGeminiService::test_parse_signals_clean_response_strips_markers PASSED [ 54%]
+tests/test_ml.py::TestGeminiService::test_parse_signals_urgency_clamped_to_10 PASSED [ 55%]
+tests/test_ml.py::TestGeminiService::test_parse_signals_urgency_clamped_to_1 PASSED [ 57%]
+tests/test_ml.py::TestGeminiService::test_parse_signals_defaults_on_missing PASSED [ 59%]
+tests/test_ml.py::TestGeminiService::test_build_system_prompt_contains_user_name PASSED [ 61%]
+tests/test_ml.py::TestGeminiService::test_build_system_prompt_contains_city PASSED [ 62%]
+tests/test_ml.py::TestGeminiService::test_build_system_prompt_hindi_female PASSED [ 64%]
+tests/test_ml.py::TestGeminiService::test_build_system_prompt_hindi_male PASSED [ 66%]
+tests/test_ml.py::TestGeminiService::test_build_system_prompt_includes_hard_rules PASSED [ 67%]
+tests/test_ml.py::TestGeminiService::test_build_system_prompt_active_orders PASSED [ 69%]
+tests/test_ml.py::TestTTSService::test_voice_map_hindi_female PASSED     [ 71%]
+tests/test_ml.py::TestTTSService::test_voice_map_hindi_male PASSED       [ 72%]
+tests/test_ml.py::TestTTSService::test_voice_map_english_female PASSED   [ 74%]
+tests/test_ml.py::TestTTSService::test_voice_map_english_male PASSED     [ 76%]
+tests/test_ml.py::TestTTSService::test_synthesize_empty_text_returns_empty_bytes PASSED [ 77%]
+tests/test_ml.py::TestTTSService::test_synthesize_returns_bytes_on_success PASSED [ 79%]
+tests/test_ml.py::TestTTSService::test_synthesize_returns_empty_on_request_error PASSED [ 81%]
+tests/test_ml.py::TestTTSService::test_synthesize_returns_empty_on_bad_response PASSED [ 83%]
+tests/test_ml.py::TestIntegrationService::test_parse_zomato_notification PASSED [ 84%]
+tests/test_ml.py::TestIntegrationService::test_parse_amazon_notification PASSED [ 86%]
+tests/test_ml.py::TestIntegrationService::test_parse_swiggy_notification PASSED [ 88%]
+tests/test_ml.py::TestIntegrationService::test_parse_unknown_package_returns_none PASSED [ 89%]
+tests/test_ml.py::TestIntegrationService::test_parse_notification_no_order_id PASSED [ 91%]
+tests/test_ml.py::TestIntegrationService::test_build_orders_context_string_empty PASSED [ 93%]
+tests/test_ml.py::TestIntegrationService::test_build_orders_context_string_with_orders PASSED [ 94%]
+tests/test_ml.py::TestIntegrationService::test_to_active_orders_list_parses_context FAILED [ 96%]
+tests/test_ml.py::TestIntegrationService::test_build_delivery_context_no_gmail_no_notifs PASSED [ 98%]
+tests/test_ml.py::TestIntegrationService::test_build_delivery_context_deduplicates PASSED [100%]
+
+================================== FAILURES ===================================
+________________ TestClassifier.test_classify_scam_transcript _________________
+tests\test_ml.py:115: in test_classify_scam_transcript
+    assert result["category"] == "SCAM"
+E   AssertionError: assert 'TELEMARKETER' == 'SCAM'
+E     
+E     - SCAM
+E     + TELEMARKETER
+________________ TestClassifier.test_classify_bank_transcript _________________
+tests\test_ml.py:139: in test_classify_bank_transcript
+    assert result["category"] == "BANK"
+E   AssertionError: assert 'SCAM' == 'BANK'
+E     
+E     - BANK
+E     + SCAM
+______ TestIntegrationService.test_to_active_orders_list_parses_context _______
+tests\test_ml.py:470: in test_to_active_orders_list_parses_context
+    assert len(orders) == 2
+E   AssertionError: assert 3 == 2
+E    +  where 3 = len([{'description': 'Active delivery orders:', 'id': 'N/A'}, {'description': 'Zomato order #45821 is out for delivery', 'id': '45821'}, {'description': 'Amazon order #407-123 has been shipped', 'id': '407-123'}])
+=========================== short test summary info ===========================
+FAILED tests/test_ml.py::TestClassifier::test_classify_scam_transcript - Asse...
+FAILED tests/test_ml.py::TestClassifier::test_classify_bank_transcript - Asse...
+FAILED tests/test_ml.py::TestIntegrationService::test_to_active_orders_list_parses_context
+======================== 3 failed, 56 passed in 3.45s =========================

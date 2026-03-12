@@ -1,0 +1,8 @@
+{
+  "pythonVersion": "3.10",
+  "pythonPlatform": "Windows",
+  "venvPath": ".",
+  "venv": "venv",
+  "include": ["app", "tests"],
+  "typeCheckingMode": "basic"
+}
